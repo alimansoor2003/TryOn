@@ -4,11 +4,41 @@ import { LM } from './landmarks.js';
 const MIN_VISIBILITY = 0.55;
 
 /**
- * Average adult torso length (shoulder line -> hip line) expressed in shoulder
- * widths. Used to turn measured torso height into a length correction so a
- * long-torsoed shopper doesn't get a jacket that stops at the ribs.
+ * Reference line is too short to be a real body part — usually a half-detected
+ * person at the edge of frame. Rendering here produces a postage-stamp garment
+ * floating in space.
  */
-const NOMINAL_TORSO_RATIO = 1.45;
+const MIN_REFERENCE_PX = 24;
+
+/**
+ * Where a garment hangs from.
+ *
+ * `reference` is the pair of joints that gives the garment its width, angle and
+ * position. `extent` is the pair further down the body used only to correct
+ * length, and is optional at runtime: hips leave the frame in a close crop, and
+ * knees leave it in almost any try-on framing. Losing them should cost the
+ * length correction, not the whole overlay.
+ *
+ * `nominalExtentRatio` is the distance from the reference line to the extent
+ * line on an average adult, expressed in reference-line widths.
+ */
+const REGIONS = {
+  upper: {
+    reference: [LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER],
+    extent: [LM.LEFT_HIP, LM.RIGHT_HIP],
+    // Adult male: ~39cm biacromial breadth, ~50cm acromion to hip joint.
+    nominalExtentRatio: 1.3,
+  },
+  lower: {
+    reference: [LM.LEFT_HIP, LM.RIGHT_HIP],
+    extent: [LM.LEFT_KNEE, LM.RIGHT_KNEE],
+    // Adult male: ~19cm between hip joint centres, ~40cm hip to knee. Note
+    // this is roughly 2x the upper-body ratio — the hip landmarks sit much
+    // closer together than the shoulders, so reusing the upper-body number
+    // here would peg the length correction to its clamp on every real body.
+    nominalExtentRatio: 2.1,
+  },
+};
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
@@ -19,7 +49,7 @@ function midpoint(a, b) {
 function visible(landmarks, index) {
   const lm = landmarks[index];
   // The Tasks API omits `visibility` on some builds; absence means "trust it".
-  return lm && (lm.visibility === undefined || lm.visibility >= MIN_VISIBILITY);
+  return Boolean(lm) && (lm.visibility === undefined || lm.visibility >= MIN_VISIBILITY);
 }
 
 /**
@@ -27,66 +57,65 @@ function visible(landmarks, index) {
  *
  * @param {Array<{x:number,y:number,visibility?:number}>} landmarks normalized pose
  * @param {(lm:{x:number,y:number}) => {x:number,y:number}} project normalized -> CSS px
- * @param {{anchor:{x:number,y:number}, shoulderSpan:number, widthFactor:number, offsetY:number}} fit
+ * @param {{region?:'upper'|'lower', anchor:{x:number,y:number}, span:number, widthFactor:number, offsetY:number}} fit
  * @param {{width:number,height:number}} imageSize intrinsic size of the garment art
- * @returns {null | {x:number,y:number,angle:number,width:number,height:number,anchor:{x:number,y:number},shoulderWidth:number,confidence:number}}
  */
 export function computeGarmentTransform(landmarks, project, fit, imageSize) {
-  if (!landmarks || landmarks.length < 25) return null;
+  const region = REGIONS[fit.region ?? 'upper'];
+  if (!region) return null;
 
-  const needed = [LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_HIP, LM.RIGHT_HIP];
-  if (!needed.every((i) => visible(landmarks, i))) return null;
+  const [leftIdx, rightIdx] = region.reference;
+  if (!landmarks || landmarks.length <= Math.max(leftIdx, rightIdx)) return null;
+  if (!visible(landmarks, leftIdx) || !visible(landmarks, rightIdx)) return null;
 
-  const leftShoulder = project(landmarks[LM.LEFT_SHOULDER]);
-  const rightShoulder = project(landmarks[LM.RIGHT_SHOULDER]);
-  const shoulderMid = midpoint(leftShoulder, rightShoulder);
-  const hipMid = midpoint(project(landmarks[LM.LEFT_HIP]), project(landmarks[LM.RIGHT_HIP]));
+  const left = project(landmarks[leftIdx]);
+  const right = project(landmarks[rightIdx]);
+  const referenceMid = midpoint(left, right);
 
-  // Shoulder line, pointing from the wearer's right shoulder to their left.
-  const vx = leftShoulder.x - rightShoulder.x;
-  const vy = leftShoulder.y - rightShoulder.y;
-  const shoulderWidth = Math.hypot(vx, vy);
+  // Reference line, pointing from the wearer's right side to their left.
+  const vx = left.x - right.x;
+  const vy = left.y - right.y;
+  const referenceWidth = Math.hypot(vx, vy);
+  if (referenceWidth < MIN_REFERENCE_PX) return null;
 
-  // Too small to be a real torso: usually a half-detected person at the edge of
-  // frame. Rendering here produces a postage-stamp jacket floating in space.
-  if (shoulderWidth < 24) return null;
-
-  // Roll: the garment's shoulder seam follows the wearer's shoulder line.
+  // Roll: the garment follows the tilt of the joints it hangs from.
   const angle = Math.atan2(vy, vx);
 
-  // Torso "down" axis = shoulder line rotated 90 degrees (canvas y grows down).
-  const downX = -vy / shoulderWidth;
-  const downY = vx / shoulderWidth;
+  // Body "down" axis = reference line rotated 90 degrees (canvas y grows down).
+  const downX = -vy / referenceWidth;
+  const downY = vx / referenceWidth;
 
-  // Width comes from the shoulders; the PNG's own shoulder span tells us how
-  // much of the artwork that span represents.
-  const width = (shoulderWidth * fit.widthFactor) / fit.shoulderSpan;
+  // Width comes from the body; the artwork's own span tells us how much of the
+  // image that measurement covers.
+  const width = (referenceWidth * fit.widthFactor) / fit.span;
 
-  // Height follows the artwork's aspect, then gets a bounded correction from
-  // the measured torso so proportions track the actual body.
-  const torsoLength = Math.hypot(hipMid.x - shoulderMid.x, hipMid.y - shoulderMid.y);
-  const lengthCorrection = clamp(
-    torsoLength / (NOMINAL_TORSO_RATIO * shoulderWidth),
-    0.82,
-    1.22,
-  );
+  // Height follows the artwork's aspect, then takes a bounded correction from
+  // the measured body so proportions track the wearer. The correction is
+  // skipped rather than guessed when the lower joints are out of frame.
+  const [extentLeft, extentRight] = region.extent;
+  let lengthCorrection = 1;
+  if (visible(landmarks, extentLeft) && visible(landmarks, extentRight)) {
+    const extentMid = midpoint(project(landmarks[extentLeft]), project(landmarks[extentRight]));
+    const reach = Math.hypot(extentMid.x - referenceMid.x, extentMid.y - referenceMid.y);
+    lengthCorrection = clamp(reach / (region.nominalExtentRatio * referenceWidth), 0.82, 1.22);
+  }
   const height = width * (imageSize.height / imageSize.width) * lengthCorrection;
 
-  // Anchor sits on the shoulder line, nudged along the torso axis.
-  const slide = fit.offsetY * shoulderWidth;
+  // Anchor sits on the reference line, nudged along the body axis.
+  const slide = fit.offsetY * referenceWidth;
 
   return {
-    x: shoulderMid.x + downX * slide,
-    y: shoulderMid.y + downY * slide,
+    x: referenceMid.x + downX * slide,
+    y: referenceMid.y + downY * slide,
     angle,
     width,
     height,
     anchor: fit.anchor,
-    shoulderWidth,
+    referenceWidth,
     // Rough proxy for "is this pose worth trusting" — used only for UI hints.
     confidence: Math.min(
       1,
-      needed.reduce((sum, i) => sum + (landmarks[i].visibility ?? 1), 0) / needed.length,
+      ((landmarks[leftIdx].visibility ?? 1) + (landmarks[rightIdx].visibility ?? 1)) / 2,
     ),
   };
 }
@@ -103,12 +132,6 @@ export function drawGarment(ctx, image, t, opacity = 1) {
   ctx.globalAlpha = opacity;
   ctx.translate(t.x, t.y);
   ctx.rotate(t.angle);
-  ctx.drawImage(
-    image,
-    -t.anchor.x * t.width,
-    -t.anchor.y * t.height,
-    t.width,
-    t.height,
-  );
+  ctx.drawImage(image, -t.anchor.x * t.width, -t.anchor.y * t.height, t.width, t.height);
   ctx.restore();
 }

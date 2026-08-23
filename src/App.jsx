@@ -118,7 +118,7 @@ export default function App() {
                 <button
                   type="button"
                   disabled
-                  title="Phase 4: needs a real product photograph before IDM-VTON can run"
+                  title="The /api/tryon endpoint is live; the capture and result UI is Phase 4"
                   className="flex size-16 items-center justify-center rounded-full border-4 border-white/25 bg-white/15 text-white/40 disabled:cursor-not-allowed"
                   aria-label="Capture high-resolution try-on photo"
                 >
@@ -126,8 +126,8 @@ export default function App() {
                 </button>
                 <p className="text-[11px] text-white/35">
                   {garment.product.ready
-                    ? 'Capture HD photo'
-                    : 'HD capture unlocks once real product photos are added'}
+                    ? 'HD capture arrives with Phase 4'
+                    : 'HD capture needs a product photo for this item'}
                 </p>
               </div>
             </div>

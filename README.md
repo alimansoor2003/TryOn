@@ -1,6 +1,6 @@
 # In-Store QR WebAR Virtual Try-On
 
-Scan a QR code on a garment tag, open a web page, see the suit on yourself. No app install.
+Scan a QR code on a garment tag, open a web page, see the garment on yourself. No app install.
 
 **Status: Phases 1–3 complete and working** — project setup, live camera, MediaPipe pose tracking, and a 2D garment overlay with automatic scale, tilt and translate. The Phase 4 backend (`/api/tryon` → Replicate IDM-VTON) is implemented and deployable, but its UI is not wired up yet, so the capture button is intentionally disabled. See [Status against the PRD](#status-against-the-prd).
 
@@ -24,7 +24,7 @@ npm test
 ## How it works
 
 ```
-QR code  ->  /?item_id=SUIT_01
+QR code  ->  /?item_id=TEE_01
                   |
                   v
           getUserMedia (front camera)
@@ -40,14 +40,19 @@ One `requestAnimationFrame` loop does detect-and-draw together. Splitting them o
 
 ### The fit solver
 
-`src/lib/fit.js` turns four landmarks into a transform:
+`src/lib/fit.js` turns four landmarks into a transform. Garments declare a `region`, which selects the joints they hang from:
 
-| Input | Landmarks | Drives |
+| `region` | Reference joints (scale, angle, position) | Extent joints (length correction) |
 |---|---|---|
-| Shoulder width | 11, 12 | Garment scale |
-| Shoulder angle | 11, 12 | Rotation |
-| Shoulder midpoint | 11, 12 | Position |
-| Torso height | 11, 12, 23, 24 | Length correction, clamped 0.82–1.22 |
+| `upper` | Shoulders — 11, 12 | Hips — 23, 24 |
+| `lower` | Hips — 23, 24 | Knees — 25, 26 |
+
+A garment without `region` defaults to `upper`, so shorts that forget to declare
+`lower` render across the chest. `npm test` fails on that.
+
+The extent joints are **optional at runtime**. Hips leave the frame in a close
+crop and knees leave it in almost any try-on framing; losing them costs the
+length correction, not the whole overlay.
 
 The length correction is clamped on purpose. An unclamped ratio means one bad hip detection stretches the jacket to the floor for a frame, and a single frame of that is more noticeable than never correcting at all.
 
@@ -55,9 +60,26 @@ The solver returns `null` — drawing nothing — when joints fall below 0.55 vi
 
 ### Calibrating a garment
 
-The four numbers in each garment's `fit` block are properties of *the artwork*, not of the code, so they have to be re-derived whenever you replace an image.
+The numbers in each garment's `fit` block are properties of *the artwork*, not of the code, so they have to be re-derived whenever you replace an image.
 
-Tap **Fit** in the top bar for live sliders, adjust while watching yourself, then hit **Copy fit block** and paste the result into `src/data/garments.js`. About a minute per suit; editing a file and reloading on a phone takes far longer.
+`span` is the one that matters and the one that is easy to get wrong. It is the
+fraction of the artwork's width covering the wearer's **joint separation** — not
+the garment's outline at that height. On a tee the sleeve caps sit well outboard
+of the shoulder joints, so reading `span` off the silhouette makes the garment
+render far too small.
+
+Where the photo is a true flat-lay you can compute it: take a known measurement
+off the width profile (`npm run cutout` prints one), convert to px/cm, and
+express the joint separation — 39cm between adult shoulder joints, 19cm between
+hip joints — as a fraction of image width. That is how `SHORTS_01` was derived.
+
+Where the photo is a **ghost-mannequin shot** the arithmetic does not hold: the
+garment is filled out and shot with perspective, so its proportions do not match
+the real garment. `TEE_01`'s photo has a length:chest ratio of 1.97 against a real
+tee's 1.38, and the computed `span` renders it ~50% oversized. Those need
+calibrating by eye instead.
+
+Tap **Fit** in the top bar for live sliders, adjust while watching yourself, then hit **Copy fit block** and paste the result into `src/data/garments.js`. About a minute per garment; editing a file and reloading on a phone takes far longer.
 
 Drop **Opacity** below 1 to see how the garment lines up against your actual body, and enable **Show pose landmarks** to confirm tracking is sane.
 
@@ -65,26 +87,34 @@ Drop **Opacity** below 1 to see how the garment lines up against your actual bod
 
 ## Adding real garments
 
-Each suit needs **two different images**, because the two try-on modes read completely different things from them:
+Each garment needs **two different images**, because the two try-on modes read
+completely different things from them — the AR overlay wants the garment cut out
+of its background, while IDM-VTON wants the ordinary photograph. Both come from
+one source photo:
 
-| | AR overlay (`fit.src`) | AI try-on (`product.src`) |
-|---|---|---|
-| Format | PNG with alpha | JPG/PNG, opaque |
-| Content | Garment alone, cut out | Normal product photograph |
-| Framing | Front-facing, flat, symmetrical | Flat-lay or plain mannequin |
-| Shadows | **None** — baked shadows read as dirt over live video | Natural, as shot |
-| Background | Transparent | White or neutral |
+```bash
+npm run cutout -- incoming/YOUR_PHOTO.jpg tee-black
+```
 
-A silhouette will not work as a `product.src`: IDM-VTON reads texture and drape from that image, and given a flat shape it returns mush. `/api/tryon` refuses to run until `product.ready` is `true`, and `npm test` fails if you set that flag without adding the file.
+That writes `public/garments/tee-black/overlay.png` (alpha cutout for the AR
+overlay) and `product.jpg` (the untouched photo, for IDM-VTON), and prints the
+width profile used for calibration.
 
-Steps:
+Background removal is a **border flood fill**, not a brightness threshold. These
+garments carry white stripes and white collar trim that are as bright as the
+studio backdrop, so a global threshold punches holes straight through them.
+Filling inward from the frame edge only removes background actually connected to
+the edge, leaving interior white intact.
 
-1. Drop files into `public/garments/<suit>/`.
-2. Update `fit.src` and `product.src` in `src/data/garments.js`.
-3. Calibrate the overlay with the **Fit** panel and paste the block back.
-4. Set `product.ready: true` once the product photo is in place.
+Then:
 
-The three suits currently shipped are **placeholders** generated by `npm run placeholders` — simple SVG silhouettes, so the AR pipeline is demoable before photography exists.
+1. Add the garment to `src/data/garments.js`, declaring `region` (`upper` / `lower`).
+2. Calibrate `span` — see above — and trim with the in-app **Fit** panel.
+3. Set `product.ready: true` once the product photo is in place.
+
+A cutout will not work as a `product.src`: IDM-VTON reads texture and drape from
+that image. `/api/tryon` refuses to run until `product.ready` is `true`, and
+`npm test` fails if you set that flag without adding the file.
 
 ---
 
@@ -106,7 +136,7 @@ Then set `REPLICATE_API_TOKEN` under Project → Settings → Environment Variab
 npm run qr -- https://your-app.vercel.app
 ```
 
-Writes `qr-codes/SUIT_01.png` and friends, and prints scannable codes in the terminal. Error correction is set to `H` because these get printed small onto tags that crease, and a scan that fails in front of a customer ends the demo.
+Writes `qr-codes/TEE_01.png` and friends, and prints scannable codes in the terminal. Error correction is set to `H` because these get printed small onto tags that crease, and a scan that fails in front of a customer ends the demo.
 
 ---
 
@@ -137,18 +167,19 @@ That variable deliberately has **no** `VITE_` prefix. Vite inlines `VITE_*` vari
 | Requirement | State |
 |---|---|
 | F1 — `item_id` URL routing, per-garment assets | Done. Unknown ids fall back with a visible notice. |
-| F2 — WebRTC camera, 33-point pose, auto scale/tilt/translate | Done. |
+| F2 — WebRTC camera, 33-point pose, auto scale/tilt/translate | Done, upper and lower body. |
 | F3 — Capture, IDM-VTON, result | Backend done (`api/tryon.js`); UI not wired. |
 | F4 — Viewfinder, top bar, carousel, result modal | Viewfinder, top bar and carousel done. Result modal pending with F3. |
 | NFR — iOS 15+, Android 10+ | Coded for, **not yet verified on real devices**. |
 | NFR — 24–30 FPS on mid-range | Pipeline runs at camera framerate; inference measures ~21ms (~48fps of headroom) on an Intel iGPU. **Not yet measured on a mid-range phone.** |
-| NFR — no database, 3 hardcoded suits | Done. |
+| NFR — no database, hardcoded catalogue | Done. Ships the two real garments that have photography, not three. |
 
 ### Known limitations
 
 - **Turning sideways shrinks the garment.** Scale is driven by apparent shoulder width, so rotating away from the camera reads as "smaller". Fixing it properly needs a depth or orientation estimate from the z-landmarks.
 - **A 2D overlay does not occlude.** Raise an arm across your chest and the jacket draws over it. Real occlusion needs segmentation masks, roughly another 8ms per frame.
 - **No cloth simulation.** The overlay is a rigid stamp: it scales, rotates and translates, but does not fold or drape. That realism is exactly what the Phase 4 diffusion pass is for.
+- **Calibration assumes an average adult frame.** `span` is tuned against 39cm shoulders and 19cm hips. A notably larger or smaller shopper gets a proportionally off garment, because the solver scales from joint separation alone.
 
 ---
 
@@ -162,7 +193,7 @@ src/lib/smoothing.js      One Euro filter, kills overlay shimmer
 src/lib/viewport.js       object-fit: cover projection + DPR canvas setup
 src/hooks/                Camera, pose model, image preloading
 src/components/           Viewfinder, top bar, carousel, fit tuner, status states
-scripts/                  Tests, QR generation, placeholder art, model vendoring
+scripts/                  Tests, QR generation, garment cutouts, model vendoring
 ```
 
 ## Scripts
@@ -172,5 +203,5 @@ scripts/                  Tests, QR generation, placeholder art, model vendoring
 | `npm run dev` | Dev server, exposed on the LAN |
 | `npm test` | Fit-math and catalogue tests |
 | `npm run qr -- <url>` | Generate the in-store QR codes |
-| `npm run placeholders` | Regenerate placeholder suit art |
+| `npm run cutout -- <photo> <dir>` | Turn a product photo into overlay + product assets |
 | `npm run vendor:model` | Download pose weights for offline serving |

@@ -29,12 +29,12 @@ const CONTROLS = [
     hint: 'Slide along the torso, in shoulder widths',
   },
   {
-    key: 'shoulderSpan',
-    label: 'Seam span',
+    key: 'span',
+    label: 'Body span',
     min: 0.3,
     max: 0.95,
     step: 0.005,
-    hint: 'How much of the image width sits between the shoulder seams',
+    hint: 'How much of the image width sits between the anchor joints',
   },
   {
     key: 'anchorY',
@@ -62,8 +62,9 @@ export default function FitTuner({ garment, fit, onChange, opacity, onOpacityCha
   const copyBlock = async () => {
     const block = `fit: {
   src: '${garment.fit.src}',
+  region: '${fit.region ?? 'upper'}',
   anchor: { x: ${fit.anchor.x}, y: ${Number(fit.anchor.y.toFixed(3))} },
-  shoulderSpan: ${Number(fit.shoulderSpan.toFixed(3))},
+  span: ${Number(fit.span.toFixed(3))},
   widthFactor: ${Number(fit.widthFactor.toFixed(3))},
   offsetY: ${Number(fit.offsetY.toFixed(3))},
 },`;
@@ -84,7 +85,7 @@ export default function FitTuner({ garment, fit, onChange, opacity, onOpacityCha
     <section className="rounded-2xl border border-white/12 bg-black/70 p-4 backdrop-blur-md">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">
-          Fit calibration — {garment.id}
+          Fit calibration — {garment.id} · {fit.region ?? 'upper'} body
         </h2>
         <button
           type="button"
