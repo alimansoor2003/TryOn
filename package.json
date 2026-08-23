@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "qr": "node scripts/generate-qr.mjs",
-    "test": "node scripts/test-fit.mjs && node scripts/test-catalogue.mjs",
+    "test": "node scripts/test-fit.mjs && node scripts/test-capture.mjs && node scripts/test-catalogue.mjs",
     "vendor:model": "node scripts/vendor-model.mjs",
     "cutout": "node scripts/cutout.mjs"
   },

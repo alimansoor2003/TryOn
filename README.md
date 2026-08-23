@@ -2,7 +2,7 @@
 
 Scan a QR code on a garment tag, open a web page, see the garment on yourself. No app install.
 
-**Status: Phases 1–3 complete and working** — project setup, live camera, MediaPipe pose tracking, and a 2D garment overlay with automatic scale, tilt and translate. The Phase 4 backend (`/api/tryon` → Replicate IDM-VTON) is implemented and deployable, but its UI is not wired up yet, so the capture button is intentionally disabled. See [Status against the PRD](#status-against-the-prd).
+**Status: Phases 1–4 complete** — project setup, live camera, MediaPipe pose tracking, and a 2D garment overlay with automatic scale, tilt and translate. The Phase 4 backend (`/api/tryon` → Replicate IDM-VTON) is implemented and deployable, but its UI is not wired up yet, so the capture button is intentionally disabled. See [Status against the PRD](#status-against-the-prd).
 
 ---
 
@@ -12,6 +12,11 @@ Scan a QR code on a garment tag, open a web page, see the garment on yourself. N
 npm install
 npm run dev
 ```
+
+`npm run dev` also serves `/api/*` by running the Vercel functions inside Vite,
+so the AI try-on works locally. Put `REPLICATE_API_TOKEN` in `.env.local` first —
+without it the endpoint returns a clear `missing_token` error rather than
+failing obscurely.
 
 Open the printed Network URL on a phone. **The camera will not work over plain `http://`** — see [Testing on a phone](#testing-on-a-phone).
 
@@ -57,6 +62,28 @@ length correction, not the whole overlay.
 The length correction is clamped on purpose. An unclamped ratio means one bad hip detection stretches the jacket to the floor for a frame, and a single frame of that is more noticeable than never correcting at all.
 
 The solver returns `null` — drawing nothing — when joints fall below 0.55 visibility or the person is too small in frame. A garment stamped onto a half-detected body looks broken in a way that "step back into frame" does not.
+
+### The AI try-on (Phase 4)
+
+Pressing **Try It On (AI)** captures a frame, posts it to `/api/tryon`, and shows
+the IDM-VTON result with Download and Try Another.
+
+Three things about it are deliberate:
+
+- **It captures the raw video, not the canvas.** The 2D overlay is an alignment
+  guide. Baking it into the photo would hand the model a person already wearing
+  a flat sticker of the garment, and it would try to dress that.
+- **The frame is mirrored to match the preview.** The front camera is shown
+  mirrored so it behaves like a mirror; capturing unmirrored returns a result
+  flipped from what the shopper was just looking at.
+- **The button is gated on the tracker seeing a body.** Firing with nobody in
+  frame spends a paid Replicate call rendering an empty room.
+
+**On the PRD's 3–5 second target:** that holds for a warm model. Replicate cold
+starts IDM-VTON after a quiet spell and the first call can take half a minute.
+The UI therefore shows elapsed time and staged messages, not a countdown — a
+countdown that hits zero and keeps going reads as broken. The request times out
+at 90s and says explicitly that a cold start is the likely cause.
 
 ### Calibrating a garment
 
@@ -213,8 +240,8 @@ That variable deliberately has **no** `VITE_` prefix. Vite inlines `VITE_*` vari
 |---|---|
 | F1 — `item_id` URL routing, per-garment assets | Done. Unknown ids fall back with a visible notice. |
 | F2 — WebRTC camera, 33-point pose, auto scale/tilt/translate | Done, upper and lower body. |
-| F3 — Capture, IDM-VTON, result | Backend done (`api/tryon.js`); UI not wired. |
-| F4 — Viewfinder, top bar, carousel, result modal | Viewfinder, top bar and carousel done. Result modal pending with F3. |
+| F3 — Capture, IDM-VTON, result | Done. **Never run against live Replicate** — no token here. |
+| F4 — Viewfinder, top bar, carousel, result modal | Done, with before/after compare. |
 | NFR — iOS 15+, Android 10+ | Coded for, **not yet verified on real devices**. |
 | NFR — 24–30 FPS on mid-range | Pipeline runs at camera framerate; inference measures ~21ms (~48fps of headroom) on an Intel iGPU. **Not yet measured on a mid-range phone.** |
 | NFR — no database, hardcoded catalogue | Done. Ships the two real garments that have photography, not three. |
@@ -236,7 +263,8 @@ src/data/garments.js      The catalogue: both asset types + fit calibration
 src/lib/fit.js            Landmarks -> garment transform
 src/lib/smoothing.js      One Euro filter, kills overlay shimmer
 src/lib/viewport.js       object-fit: cover projection + DPR canvas setup
-src/hooks/                Camera, pose model, image preloading
+src/hooks/                Camera, pose model, image preloading, try-on request
+src/lib/capture.js        Frame capture: mirror, downscale, encode
 src/components/           Viewfinder, top bar, carousel, fit tuner, status states
 scripts/                  Tests, QR generation, garment cutouts, model vendoring
 ```

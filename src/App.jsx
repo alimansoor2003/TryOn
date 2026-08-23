@@ -3,10 +3,12 @@ import TryOnStage from './components/TryOnStage.jsx';
 import TopBar from './components/TopBar.jsx';
 import GarmentCarousel from './components/GarmentCarousel.jsx';
 import FitTuner from './components/FitTuner.jsx';
+import TryOnResult from './components/TryOnResult.jsx';
 import StatusLayer from './components/StatusLayer.jsx';
 import { useCamera } from './hooks/useCamera.js';
 import { usePoseLandmarker } from './hooks/usePoseLandmarker.js';
 import { useGarmentImages } from './hooks/useGarmentImages.js';
+import { useTryOn } from './hooks/useTryOn.js';
 import { GARMENTS, resolveGarment } from './data/garments.js';
 
 /** Reads ?item_id=SUIT_01 off the QR-code URL. */
@@ -32,6 +34,7 @@ export default function App() {
   const camera = useCamera({ autoStart: true });
   const model = usePoseLandmarker({ enabled: true });
   const { images, failed } = useGarmentImages(GARMENTS);
+  const tryOn = useTryOn();
 
   const garment = useMemo(
     () => GARMENTS.find((g) => g.id === activeId) ?? GARMENTS[0],
@@ -70,6 +73,11 @@ export default function App() {
   );
 
   const ready = camera.status === 'ready' && model.status === 'ready';
+
+  // The button needs a prepared garment asset, a settled camera, and a body the
+  // tracker can actually see. Firing without a person in frame burns a paid
+  // Replicate call to render a photo of an empty room.
+  const canTryOn = ready && garment.product.ready && stats.tracking && tryOn.status === 'idle';
 
   return (
     <main className="relative h-full w-full overflow-hidden bg-black">
@@ -130,17 +138,29 @@ export default function App() {
               <div className="mt-3 flex flex-col items-center gap-1.5 px-4">
                 <button
                   type="button"
-                  disabled
-                  title="The /api/tryon endpoint is live; the capture and result UI is Phase 4"
-                  className="flex size-16 items-center justify-center rounded-full border-4 border-white/25 bg-white/15 text-white/40 disabled:cursor-not-allowed"
-                  aria-label="Capture high-resolution try-on photo"
+                  onClick={() =>
+                    tryOn.run(camera.videoRef.current, garment, {
+                      mirror: camera.facingMode === 'user',
+                    })
+                  }
+                  disabled={!canTryOn}
+                  title={
+                    garment.product.ready
+                      ? 'Generate a photorealistic try-on with IDM-VTON'
+                      : 'This item has no prepared garment asset yet'
+                  }
+                  className="flex items-center gap-2.5 rounded-full bg-white px-7 py-3.5 text-[15px] font-semibold text-black shadow-lg transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-white/25 disabled:text-white/40 disabled:shadow-none"
+                  aria-label="Generate a photorealistic AI try-on"
                 >
-                  <span className="size-11 rounded-full bg-current" />
+                  <span aria-hidden className="text-base leading-none">✦</span>
+                  Try It On (AI)
                 </button>
                 <p className="text-[11px] text-white/35">
-                  {garment.product.ready
-                    ? 'HD capture arrives with Phase 4'
-                    : 'HD capture needs a product photo for this item'}
+                  {!garment.product.ready
+                    ? 'No garment asset prepared for this item yet'
+                    : !stats.tracking
+                      ? 'Step into frame first'
+                      : 'Uses your camera frame — the overlay above is only a guide'}
                 </p>
               </div>
             </div>
@@ -153,6 +173,20 @@ export default function App() {
           )}
         </>
       )}
+
+      <TryOnResult
+        status={tryOn.status}
+        result={tryOn.result}
+        captured={tryOn.captured}
+        error={tryOn.error}
+        elapsed={tryOn.elapsed}
+        garment={garment}
+        onCancel={tryOn.cancel}
+        onClose={tryOn.reset}
+        onRetry={() =>
+          tryOn.run(camera.videoRef.current, garment, { mirror: camera.facingMode === 'user' })
+        }
+      />
 
       <StatusLayer
         camera={camera}
