@@ -95,23 +95,36 @@ export default function App() {
             onToggleTune={() => setTuning((v) => !v)}
           />
 
-          <div className="absolute inset-x-0 bottom-0 z-20 pb-[env(safe-area-inset-bottom)]">
-            <div className="bg-gradient-to-t from-black/85 via-black/55 to-transparent pb-4 pt-12">
-              {tuning && (
-                <div className="mb-3 px-4">
-                  <FitTuner
-                    garment={garment}
-                    fit={fit}
-                    onChange={setFit}
-                    opacity={opacity}
-                    onOpacityChange={setOpacity}
-                    showSkeleton={showSkeleton}
-                    onSkeletonChange={setShowSkeleton}
-                    onReset={resetFit}
-                  />
-                </div>
-              )}
+          {/*
+            Docked right rather than stacked above the carousel. Calibration
+            means watching yourself while you drag a slider, and a bottom sheet
+            covers the hips — exactly what you need to see to place a hem or a
+            waistband. The column keeps the centre of frame clear.
+          */}
+          {tuning && (
+            <aside
+              className="absolute inset-y-0 right-0 z-30 flex w-[min(19rem,45vw)] flex-col justify-center overflow-y-auto px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-[calc(env(safe-area-inset-top)+4rem)] sm:px-3"
+              aria-label="Fit calibration"
+            >
+              <FitTuner
+                garment={garment}
+                fit={fit}
+                onChange={setFit}
+                opacity={opacity}
+                onOpacityChange={setOpacity}
+                showSkeleton={showSkeleton}
+                onSkeletonChange={setShowSkeleton}
+                onReset={resetFit}
+              />
+            </aside>
+          )}
 
+          <div className="absolute inset-x-0 bottom-0 z-20 pb-[env(safe-area-inset-bottom)]">
+            <div
+              className={`bg-gradient-to-t from-black/85 via-black/55 to-transparent pb-4 pt-12 transition-[padding] ${
+                tuning ? 'pr-[min(19rem,45vw)]' : ''
+              }`}
+            >
               <GarmentCarousel garments={GARMENTS} activeId={garment.id} onSelect={setActiveId} />
 
               <div className="mt-3 flex flex-col items-center gap-1.5 px-4">

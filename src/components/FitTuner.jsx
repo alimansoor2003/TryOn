@@ -82,10 +82,13 @@ export default function FitTuner({ garment, fit, onChange, opacity, onOpacityCha
   };
 
   return (
-    <section className="rounded-2xl border border-white/12 bg-black/70 p-4 backdrop-blur-md">
+    <section className="rounded-2xl border border-white/12 bg-black/65 p-3 backdrop-blur-md sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">
-          Fit calibration — {garment.id} · {fit.region ?? 'upper'} body
+          <span className="sm:hidden">Fit · {garment.id}</span>
+          <span className="hidden sm:inline">
+            Fit calibration — {garment.id} · {fit.region ?? 'upper'} body
+          </span>
         </h2>
         <button
           type="button"
@@ -96,7 +99,7 @@ export default function FitTuner({ garment, fit, onChange, opacity, onOpacityCha
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5 sm:space-y-3">
         {CONTROLS.map((c) => (
           <label key={c.key} className="block">
             <span className="mb-1 flex items-baseline justify-between">
@@ -115,7 +118,10 @@ export default function FitTuner({ garment, fit, onChange, opacity, onOpacityCha
               className="w-full accent-white"
               aria-describedby={`hint-${c.key}`}
             />
-            <span id={`hint-${c.key}`} className="mt-0.5 block text-[10px] leading-tight text-white/35">
+            <span
+              id={`hint-${c.key}`}
+              className="mt-0.5 hidden text-[10px] leading-tight text-white/35 sm:block"
+            >
               {c.hint}
             </span>
           </label>
@@ -137,7 +143,7 @@ export default function FitTuner({ garment, fit, onChange, opacity, onOpacityCha
             onChange={(e) => onOpacityChange(Number(e.target.value))}
             className="w-full accent-white"
           />
-          <span className="mt-0.5 block text-[10px] leading-tight text-white/35">
+          <span className="mt-0.5 hidden text-[10px] leading-tight text-white/35 sm:block">
             Drop below 1 to see how the garment lines up against your body
           </span>
         </label>
