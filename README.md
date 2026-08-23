@@ -96,15 +96,54 @@ one source photo:
 npm run cutout -- incoming/YOUR_PHOTO.jpg tee-black
 ```
 
-That writes `public/garments/tee-black/overlay.png` (alpha cutout for the AR
-overlay) and `product.jpg` (the untouched photo, for IDM-VTON), and prints the
-width profile used for calibration.
+That writes three files into `public/garments/tee-black/`:
 
-Background removal is a **border flood fill**, not a brightness threshold. These
-garments carry white stripes and white collar trim that are as bright as the
-studio backdrop, so a global threshold punches holes straight through them.
-Filling inward from the frame edge only removes background actually connected to
-the edge, leaving interior white intact.
+| File | Used by | Shape |
+|---|---|---|
+| `overlay.png` | AR overlay | Alpha cutout, cropped to the garment |
+| `garment.png` | IDM-VTON | Cutout on white, padded to a centred 768×1024 (3:4) |
+| `product.jpg` | reference | The untouched source photo |
+
+It also prints the width profile used for calibration.
+
+**Why `garment.png` is shaped that way.** IDM-VTON is trained on VITON-HD, whose
+garment images are 768×1024 flat-lays on white. Handing it a square photo on a
+grey studio sweep pushes the input off that distribution, which shows up as
+warped or discoloured output — and nothing at runtime flags it, because the
+request succeeds and simply returns a worse picture. `npm test` asserts the
+ratio and white corners so a bad asset fails at build time instead.
+
+### Background removal
+
+A **border flood fill**, not a brightness threshold: these garments carry white
+stripes and collar trim as bright as the backdrop, so a global threshold punches
+holes straight through them. Filling inward from the frame edge only removes
+background actually connected to the edge.
+
+The tolerance is **derived from the backdrop's own measured variance**, not
+hardcoded, and that is load-bearing. On these photos the white collar is
+rgb(238,235,238) against a backdrop of rgb(234,238,239) — a distance of 5.1. Any
+tolerance above that eats the collar, and because the white stripes run from the
+collar out to the sleeve cuff where they meet the backdrop, the fill enters at
+the cuff and travels up, punching the whole ring out. A generous tolerance
+destroys it *silently*: the collar is far too small a fraction of the frame to
+register as a change in total foreground.
+
+Two more passes handle the cases a fill can't:
+
+- **despeckle** drops blobs below `--despeckle` of the frame — sensor noise,
+  dust on the sweep, small patches of floor texture. It is deliberately *not*
+  "keep the largest blob": a garment routinely segments into several legitimate
+  pieces (on this tee, the back of the collar and one sleeve edge, together
+  ~1.6% of foreground), and keeping only the largest silently deletes them.
+- **`--dehanger=N`** opens the mask to sever anything thinner than ~2N px —
+  hanger hooks, straps, clip marks — which a component filter cannot touch
+  because they are attached to the garment.
+
+For a genuinely cluttered photo — garment on a hanger against a room, heavy
+floor texture — no heuristic will do. Use a segmentation model first (`rembg`
+is the most reliable route on Windows) and feed the result in with
+`--no-cutout`.
 
 Then:
 
@@ -112,9 +151,8 @@ Then:
 2. Calibrate `span` — see above — and trim with the in-app **Fit** panel.
 3. Set `product.ready: true` once the product photo is in place.
 
-A cutout will not work as a `product.src`: IDM-VTON reads texture and drape from
-that image. `/api/tryon` refuses to run until `product.ready` is `true`, and
-`npm test` fails if you set that flag without adding the file.
+`/api/tryon` refuses to run until `product.ready` is `true`, and `npm test` fails
+if you set that flag without the assets being present and correctly shaped.
 
 ---
 
@@ -203,5 +241,5 @@ scripts/                  Tests, QR generation, garment cutouts, model vendoring
 | `npm run dev` | Dev server, exposed on the LAN |
 | `npm test` | Fit-math and catalogue tests |
 | `npm run qr -- <url>` | Generate the in-store QR codes |
-| `npm run cutout -- <photo> <dir>` | Turn a product photo into overlay + product assets |
+| `npm run cutout -- <photo> <dir>` | Turn a product photo into AR + VTON assets |
 | `npm run vendor:model` | Download pose weights for offline serving |

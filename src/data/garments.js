@@ -7,9 +7,14 @@
  *   fit.*      -> AR overlay. Alpha cutout of the garment alone, produced by
  *                 `node scripts/cutout.mjs <photo> <dir>`.
  *
- *   product.*  -> IDM-VTON input. The ordinary product photograph, backdrop
- *                 and all. The diffusion model reads texture and drape from
- *                 this, so a cutout or silhouette produces mush.
+ *   product.*  -> IDM-VTON input. The garment cut out, composited on white and
+ *                 padded to a centred 3:4, which is the shape VITON-HD (what
+ *                 IDM-VTON was trained on) uses. Off-ratio or off-white inputs
+ *                 push the model off its training distribution and show up as
+ *                 warped or discoloured output.
+ *
+ * Both are produced by `npm run cutout -- <photo> <dir>`. The untouched source
+ * photo is kept alongside them as product.jpg for reference.
  *
  * The numbers in `fit` are properties of the ARTWORK, not of the code. They are
  * derived from the width profile that scripts/cutout.mjs prints, then trimmed
@@ -42,7 +47,7 @@ export const GARMENTS = [
       offsetY: 0.0,
     },
     product: {
-      src: '/garments/tee-black/product.jpg',
+      src: '/garments/tee-black/garment.png',
       category: 'upper_body',
       description: 'black adidas Adicolor 3-Stripes short sleeve t-shirt with white shoulder stripes and white collar trim',
       ready: true,
@@ -68,7 +73,7 @@ export const GARMENTS = [
       offsetY: 0.0,
     },
     product: {
-      src: '/garments/shorts-black/product.jpg',
+      src: '/garments/shorts-black/garment.png',
       category: 'lower_body',
       description: 'black adidas Adicolor 3-Stripes woven shorts with white side stripes and elastic waistband',
       ready: true,

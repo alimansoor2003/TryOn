@@ -65,15 +65,15 @@ export default async function handler(req, res) {
     return jsonError(res, 400, 'unknown_item', `No garment with id "${itemId}".`);
   }
 
-  // Guard rail rather than a limitation: a silhouette or alpha cutout gives
-  // IDM-VTON nothing to read drape and texture from, and the result looks
-  // worse than no try-on at all. Better to say why than to ship the mush.
+  // Guard rail rather than a limitation: without a prepared garment asset there
+  // is nothing sensible to send, and a bad input produces output worse than no
+  // try-on at all. Better to say why than to ship the mush.
   if (!garment.product?.ready) {
     return jsonError(
       res,
       422,
       'garment_not_ready',
-      `${garment.id} has no product photograph yet. Add a flat-lay or on-mannequin shot at ${garment.product.src} and set product.ready = true in src/data/garments.js.`,
+      `${garment.id} has no prepared garment asset yet. Run "npm run cutout -- <photo> <dir>" to produce ${garment.product.src}, then set product.ready = true in src/data/garments.js.`,
     );
   }
 
@@ -95,6 +95,12 @@ export default async function handler(req, res) {
   const startedAt = Date.now();
 
   try {
+    // garm_img is pre-normalised at asset build time rather than here: cut out,
+    // composited on white and padded to a centred 3:4, matching VITON-HD's
+    // 768x1024 garment images. Doing it offline keeps it off the request path
+    // (no cold-start cost, no segmentation model in the function bundle) and
+    // makes the exact input reviewable as a file instead of a black box.
+    //
     // Input field names follow the IDM-VTON schema on Replicate. If you switch
     // to a different VTON model, this object is the only thing that changes —
     // check the model's own schema page, since these names are not standardized

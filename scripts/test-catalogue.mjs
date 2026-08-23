@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { GARMENTS, resolveGarment } from '../src/data/garments.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,10 +89,46 @@ test('a garment marked VTON-ready actually has a product photo on disk', () => {
   }
 });
 
+test('every VTON asset is a centred 3:4 image on white', async () => {
+  // IDM-VTON is trained on VITON-HD's 768x1024 white-background garment images.
+  // Feeding it a square photo on a grey studio sweep is the most likely cause
+  // of warped or discoloured output, and nothing at runtime would flag it —
+  // the request succeeds and just returns a worse picture.
+  for (const g of GARMENTS.filter((g) => g.product.ready)) {
+    const file = resolve(ROOT, 'public', g.product.src.replace(/^\//, ''));
+    const img = sharp(file);
+    const meta = await img.metadata();
+
+    const ratio = meta.width / meta.height;
+    assert.ok(
+      Math.abs(ratio - 0.75) < 0.005,
+      `${g.id}: aspect ${ratio.toFixed(4)}, expected 0.75 (3:4)`,
+    );
+
+    // Corners must be white, which is what proves the pad actually happened
+    // rather than the source being cropped to ratio.
+    const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
+    const corners = [
+      [2, 2],
+      [meta.width - 3, 2],
+      [2, meta.height - 3],
+      [meta.width - 3, meta.height - 3],
+    ];
+    for (const [x, y] of corners) {
+      const i = (y * info.width + x) * info.channels;
+      const [r, gr, b] = [data[i], data[i + 1], data[i + 2]];
+      assert.ok(
+        r > 248 && gr > 248 && b > 248,
+        `${g.id}: corner (${x},${y}) is rgb(${r},${gr},${b}), expected white`,
+      );
+    }
+  }
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try {
-    fn();
+    await fn();
     console.log(`  PASS  ${name}`);
   } catch (err) {
     failed += 1;
