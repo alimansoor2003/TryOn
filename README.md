@@ -115,7 +115,14 @@ ratio and white corners so a bad asset fails at build time instead.
 
 ### Background removal
 
-A **border flood fill**, not a brightness threshold: these garments carry white
+**If the source already carries an alpha channel it is honoured as-is**, with no
+colour removal. Catalogue images often arrive pre-cut, and dropping their alpha
+turns a white tee on transparent into a white tee on black — the fill then eats
+whichever of the two it decides is the backdrop. Erosion is skipped for these
+too: there is no blended-backdrop halo to shave, so eroding would only eat real
+garment.
+
+Otherwise, a **border flood fill**, not a brightness threshold: these garments carry white
 stripes and collar trim as bright as the backdrop, so a global threshold punches
 holes straight through them. Filling inward from the frame edge only removes
 background actually connected to the edge.

@@ -54,6 +54,31 @@ export const GARMENTS = [
     },
   },
   {
+    id: 'TEE_WHITE',
+    name: 'Classic White Tee',
+    subtitle: 'White · Regular fit',
+    swatch: '#f0f0f2',
+    fit: {
+      src: '/garments/tee-white/overlay.png',
+      region: 'upper',
+      anchor: { x: 0.5, y: 0.08 },
+      // Another ghost-mannequin shot, so calibrated by eye rather than computed.
+      // Its width profile is close to TEE_01's — 60% across the chest against
+      // 58.5%, 99.5% at the sleeve tips against 98.8% — so it starts from the
+      // same place. Like TEE_01 it still wants one pass with the Fit panel on a
+      // real body; the photo's proportions are too distorted to derive it.
+      span: 0.7,
+      widthFactor: 1.0,
+      offsetY: 0.0,
+    },
+    product: {
+      src: '/garments/tee-white/garment.png',
+      category: 'upper_body',
+      description: 'plain white crew neck short sleeve cotton t-shirt',
+      ready: true,
+    },
+  },
+  {
     id: 'SHORTS_01',
     name: 'Adicolor 3-Stripes Shorts',
     subtitle: 'Black · Mid length',

@@ -65,6 +65,8 @@ const SKIP_CUTOUT = args.includes('--no-cutout');
 /** Pixels shaved off the edge. The backdrop is light and these garments are dark,
  *  so a single row of half-blended edge pixels reads as a bright halo. */
 const ERODE_PX = 2;
+/** Pre-cut sources need no shaving; anything above 0 eats real garment. */
+const ERODE_SOURCE_ALPHA = 0;
 /** Gaussian applied to the alpha channel only, to soften the flood fill's hard edge. */
 const FEATHER = 1.1;
 /** VITON-HD's native garment resolution, which is what IDM-VTON expects. */
@@ -75,10 +77,20 @@ const src = resolve(ROOT, input);
 const outDir = resolve(ROOT, 'public', 'garments', garmentDir);
 await mkdir(outDir, { recursive: true });
 
-const { data, info } = await sharp(src).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+// Read RGBA, not RGB. Plenty of catalogue images arrive already cut out, and
+// throwing the alpha away would force a colour-based removal that cannot work
+// on them — a white tee on a transparent background becomes a white tee on
+// black, and the fill eats whichever one it decides is the backdrop.
+const { data, info } = await sharp(src).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 const { width, height } = info;
+const CH = info.channels;
 const N = width * height;
-const px = (x, y) => (y * width + x) * 3;
+const px = (x, y) => (y * width + x) * CH;
+
+// Does the source already carry a usable cutout?
+let sourceTransparent = 0;
+for (let k = 0; k < N; k++) if (data[k * CH + 3] < 8) sourceTransparent++;
+const HAS_SOURCE_ALPHA = sourceTransparent / N > 0.02;
 
 // --- backdrop detection ----------------------------------------------------
 // Sample every border pixel and take the median rather than assuming white or
@@ -142,7 +154,7 @@ const TOLERANCE =
 
 const tol2 = TOLERANCE * TOLERANCE;
 const isBackdrop = (idx) => {
-  const i = idx * 3;
+  const i = idx * CH;
   const dr = data[i] - bg[0];
   const dg = data[i + 1] - bg[1];
   const db = data[i + 2] - bg[2];
@@ -179,7 +191,13 @@ while (head < tail) {
 }
 
 let mask = new Uint8Array(N);
-for (let i = 0; i < N; i++) mask[i] = background[i] ? 0 : 1;
+if (HAS_SOURCE_ALPHA) {
+  // Trust the alpha that shipped with the file. It was made by whoever
+  // photographed the garment and is better than anything inferred from colour.
+  for (let i = 0; i < N; i++) mask[i] = data[i * CH + 3] >= 128 ? 1 : 0;
+} else {
+  for (let i = 0; i < N; i++) mask[i] = background[i] ? 0 : 1;
+}
 
 // --- morphology ------------------------------------------------------------
 function erode(src, passes) {
@@ -287,7 +305,10 @@ if (DEHANGER > 0) {
   removedThin = n;
 }
 
-mask = erode(mask, ERODE_PX);
+// Erosion exists to shave the halo of blended backdrop pixels the flood fill
+// leaves behind. A source that arrived already cut out has no such halo, so
+// eroding it would just eat 2px of real garment.
+mask = erode(mask, HAS_SOURCE_ALPHA ? ERODE_SOURCE_ALPHA : ERODE_PX);
 
 // --- alpha channel ---------------------------------------------------------
 const hard = new Uint8Array(N);
@@ -308,9 +329,9 @@ const alpha = blurred.data;
 
 const rgba = Buffer.alloc(N * 4);
 for (let k = 0; k < N; k++) {
-  rgba[k * 4] = data[k * 3];
-  rgba[k * 4 + 1] = data[k * 3 + 1];
-  rgba[k * 4 + 2] = data[k * 3 + 2];
+  rgba[k * 4] = data[k * CH];
+  rgba[k * 4 + 1] = data[k * CH + 1];
+  rgba[k * 4 + 2] = data[k * CH + 2];
   rgba[k * 4 + 3] = alpha[k];
 }
 
@@ -372,10 +393,17 @@ await sharp(src).jpeg({ quality: 92 }).toFile(resolve(outDir, 'product.jpg'));
 
 // --- report ----------------------------------------------------------------
 const pct = (n) => ((n / N) * 100).toFixed(2);
-console.log(
-  `\nbackdrop rgb(${bg.join(',')}) spread p99 ${p99.toFixed(1)}  source ${width}x${height}  ` +
-    `tolerance ${TOLERANCE}${TOLERANCE_OVERRIDE === null ? ' (auto)' : ' (override)'}`,
-);
+if (HAS_SOURCE_ALPHA) {
+  console.log(
+    `\nsource ${width}x${height} arrived with an alpha channel ` +
+      `(${((sourceTransparent / N) * 100).toFixed(1)}% transparent) — honoured as-is, no colour removal`,
+  );
+} else {
+  console.log(
+    `\nbackdrop rgb(${bg.join(',')}) spread p99 ${p99.toFixed(1)}  source ${width}x${height}  ` +
+      `tolerance ${TOLERANCE}${TOLERANCE_OVERRIDE === null ? ' (auto)' : ' (override)'}`,
+  );
+}
 if (speckled.dropped) console.log(`dropped ${speckled.dropped} speck(s), ${pct(speckled.droppedPixels)}% of frame`);
 if (removedThin) console.log(`removed ${pct(removedThin)}% thin appendages (--dehanger=${DEHANGER})`);
 console.log(`cutout  ${cropW}x${cropH}  (cropped from ${minX},${minY})`);
