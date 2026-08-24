@@ -44,14 +44,25 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const jsonError = (res, status, code, message) =>
   res.status(status).json({ error: { code, message } });
 
-/** Turns a relative asset path into an absolute URL the provider can fetch. */
+/**
+ * Turns a relative asset path into an absolute URL the provider can fetch.
+ *
+ * The scheme has to match reality or the fetch fails outright — TLS on a plain
+ * HTTP port doesn't downgrade, it errors with ERR_SSL_WRONG_VERSION_NUMBER. In
+ * local dev `req.headers.host` is `localhost:5173` served over plain HTTP, so
+ * hardcoding `https://` here built a URL the server could never actually reach:
+ * every /api/tryon call failed with a bare "fetch failed" and no indication why.
+ * Vercel's own req carries `x-forwarded-proto: https`, which is used when
+ * present; local dev has no such header, so it falls back to matching whatever
+ * protocol Node itself is speaking (TLS socket present = https).
+ */
 function absoluteUrl(path, req) {
   if (/^https?:\/\//i.test(path)) return path;
-  const origin =
-    process.env.PUBLIC_ORIGIN ||
-    (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
-    `https://${req.headers.host}`;
-  return new URL(path, origin).toString();
+  if (process.env.PUBLIC_ORIGIN) return new URL(path, process.env.PUBLIC_ORIGIN).toString();
+  if (process.env.VERCEL_URL) return new URL(path, `https://${process.env.VERCEL_URL}`).toString();
+
+  const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
+  return new URL(path, `${proto}://${req.headers.host}`).toString();
 }
 
 function normalizeImage(input) {
