@@ -2,7 +2,9 @@
 
 Scan a QR code on a garment tag, open a web page, see the garment on yourself. No app install.
 
-**Status: Phases 1–4 complete** — project setup, live camera, MediaPipe pose tracking, and a 2D garment overlay with automatic scale, tilt and translate. The Phase 4 backend (`/api/tryon` → Replicate IDM-VTON) is implemented and deployable, but its UI is not wired up yet, so the capture button is intentionally disabled. See [Status against the PRD](#status-against-the-prd).
+**Status: Photo-AI flow complete.** The real-time WebAR overlay was removed in
+favour of a capture-and-generate flow — the live 2D overlay was only ever an
+alignment guide, and a static silhouette does that job without the cost. — project setup, live camera, MediaPipe pose tracking, and a 2D garment overlay with automatic scale, tilt and translate. The Phase 4 backend (`/api/tryon` → Replicate IDM-VTON) is implemented and deployable, but its UI is not wired up yet, so the capture button is intentionally disabled. See [Status against the PRD](#status-against-the-prd).
 
 ---
 
@@ -32,85 +34,60 @@ npm test
 QR code  ->  /?item_id=TEE_01
                   |
                   v
-          getUserMedia (front camera)
+          getUserMedia  ->  viewfinder + static SVG guide
+                  |
+         [ shutter ] or [ upload from gallery ]     <- manual only
                   |
                   v
-          MediaPipe PoseLandmarker  ->  33 landmarks
+          "Use this photo?"  ->  confirm
                   |
                   v
-          One Euro smoothing  ->  fit solver  ->  Canvas 2D overlay
+          POST /api/tryon  ->  Replicate IDM-VTON
+                  |
+                  v
+          Result: save / try another garment / retake
 ```
 
-One `requestAnimationFrame` loop does detect-and-draw together. Splitting them onto separate schedules always renders the garment against the previous frame's pose, and that one-frame offset is what people describe as "the jacket lags behind me".
+The viewfinder is a `<video>` and one inline SVG. No per-frame inference, no
+canvas loop, no WASM to download before the camera is usable — removing the
+live pose tracking took the bundle from **110KB to 68KB gzipped**.
 
-### The fit solver
+### Capture is manual, always
 
-`src/lib/fit.js` turns four landmarks into a transform. Garments declare a `region`, which selects the joints they hang from:
+There is no timer, no countdown, no burst, and no capture triggered by pose,
+focus, or any other signal anywhere in this codebase. A photo is produced by
+exactly two actions: pressing the shutter, or picking a file. `useTryOn` takes a
+data URL rather than a video element, so the network layer is structurally
+incapable of taking a picture.
 
-| `region` | Reference joints (scale, angle, position) | Extent joints (length correction) |
-|---|---|---|
-| `upper` | Shoulders — 11, 12 | Hips — 23, 24 |
-| `lower` | Hips — 23, 24 | Knees — 25, 26 |
+The gallery input is a plain `<input type="file" accept="image/*">` with **no**
+`capture` attribute — adding `capture="user"` would force the OS camera and
+defeat the point of offering an existing photo.
 
-A garment without `region` defaults to `upper`, so shorts that forget to declare
-`lower` render across the chest. `npm test` fails on that.
+Nothing is sent anywhere until the shopper sees the photo and confirms it. That
+step also stops a blurred frame becoming a bad result after a 30-second wait,
+which the shopper would blame on the app rather than the photo.
 
-The extent joints are **optional at runtime**. Hips leave the frame in a close
-crop and knees leave it in almost any try-on framing; losing them costs the
-length correction, not the whole overlay.
+### The garment fields
 
-The length correction is clamped on purpose. An unclamped ratio means one bad hip detection stretches the jacket to the floor for a frame, and a single frame of that is more noticeable than never correcting at all.
+The client sends `aiGarmentUrl`, `category` and `garment_des`, but the server
+treats them as a **claim to be checked**, not as instructions. `aiGarmentUrl` is
+a URL this server will fetch: taking it on trust would let anyone POST an
+internal address and have the server retrieve it. The garment is resolved from
+`itemId` server-side and a mismatch is rejected.
 
-The solver returns `null` — drawing nothing — when joints fall below 0.55 visibility or the person is too small in frame. A garment stamped onto a half-detected body looks broken in a way that "step back into frame" does not.
+`garment_des` is not decoration — IDM-VTON conditions on it, and a vague
+description measurably weakens the result against one naming colour, sleeve
+length and details.
 
-### The AI try-on (Phase 4)
+### Model versions
 
-Pressing **Try It On (AI)** captures a frame, posts it to `/api/tryon`, and shows
-the IDM-VTON result with Download and Try Another.
-
-Three things about it are deliberate:
-
-- **It captures the raw video, not the canvas.** The 2D overlay is an alignment
-  guide. Baking it into the photo would hand the model a person already wearing
-  a flat sticker of the garment, and it would try to dress that.
-- **The frame is mirrored to match the preview.** The front camera is shown
-  mirrored so it behaves like a mirror; capturing unmirrored returns a result
-  flipped from what the shopper was just looking at.
-- **The button is gated on the tracker seeing a body.** Firing with nobody in
-  frame spends a paid Replicate call rendering an empty room.
-
-**On the PRD's 3–5 second target:** that holds for a warm model. Replicate cold
-starts IDM-VTON after a quiet spell and the first call can take half a minute.
-The UI therefore shows elapsed time and staged messages, not a countdown — a
-countdown that hits zero and keeps going reads as broken. The request times out
-at 90s and says explicitly that a cold start is the likely cause.
-
-### Calibrating a garment
-
-The numbers in each garment's `fit` block are properties of *the artwork*, not of the code, so they have to be re-derived whenever you replace an image.
-
-`span` is the one that matters and the one that is easy to get wrong. It is the
-fraction of the artwork's width covering the wearer's **joint separation** — not
-the garment's outline at that height. On a tee the sleeve caps sit well outboard
-of the shoulder joints, so reading `span` off the silhouette makes the garment
-render far too small.
-
-Where the photo is a true flat-lay you can compute it: take a known measurement
-off the width profile (`npm run cutout` prints one), convert to px/cm, and
-express the joint separation — 39cm between adult shoulder joints, 19cm between
-hip joints — as a fraction of image width. That is how `SHORTS_01` was derived.
-
-Where the photo is a **ghost-mannequin shot** the arithmetic does not hold: the
-garment is filled out and shot with perspective, so its proportions do not match
-the real garment. `TEE_01`'s photo has a length:chest ratio of 1.97 against a real
-tee's 1.38, and the computed `span` renders it ~50% oversized. Those need
-calibrating by eye instead.
-
-Tap **Fit** in the top bar for live sliders, adjust while watching yourself, then hit **Copy fit block** and paste the result into `src/data/garments.js`. About a minute per garment; editing a file and reloading on a phone takes far longer.
-
-Drop **Opacity** below 1 to see how the garment lines up against your actual body, and enable **Show pose landmarks** to confirm tracking is sane.
-
----
+`cuuupid/idm-vton` is a community model, and an unversioned slug posts to
+`/v1/models/{owner}/{name}/predictions`, which only serves Replicate's *official*
+models — community ones answer **404** there. The endpoint resolves the latest
+version at cold start and runs through `/v1/predictions`. Pin
+`IDM_VTON_MODEL=owner/name:hash` for a demo you intend to repeat, so a model
+update cannot change the output under you.
 
 ## Adding real garments
 

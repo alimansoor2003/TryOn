@@ -27,7 +27,7 @@ function Button({ onClick, children }) {
  * order they'd hit it. Each state says what to actually do about it — a person
  * standing in a shop is not going to debug a generic error string.
  */
-export default function StatusLayer({ camera, model, assetsFailed, onRetry }) {
+export default function StatusLayer({ camera, onRetry }) {
   if (camera.status === 'unsupported') {
     return (
       <Panel
@@ -41,7 +41,7 @@ export default function StatusLayer({ camera, model, assetsFailed, onRetry }) {
     return (
       <Panel
         title="Camera permission needed"
-        body="Try-on runs entirely on your phone — nothing is recorded or uploaded. Allow camera access in your browser's site settings, then tap retry."
+        body="The camera is only a viewfinder — nothing leaves your phone until you take a photo and confirm it. Allow camera access in your browser's site settings, then tap retry."
         action={<Button onClick={onRetry}>Retry</Button>}
       />
     );
@@ -61,28 +61,11 @@ export default function StatusLayer({ camera, model, assetsFailed, onRetry }) {
     );
   }
 
-  if (model.status === 'error') {
-    return <Panel title="Pose tracking unavailable" body={model.error} action={<Button onClick={() => window.location.reload()}>Reload</Button>} />;
-  }
-
-  if (camera.status === 'requesting' || model.status !== 'ready') {
+  if (camera.status === 'requesting') {
     return (
       <Panel
-        title={camera.status === 'requesting' ? 'Starting camera…' : 'Loading body tracking…'}
-        body={
-          camera.status === 'requesting'
-            ? 'Accept the permission prompt to continue.'
-            : 'One-time download, a few seconds on first open.'
-        }
-      />
-    );
-  }
-
-  if (assetsFailed.length) {
-    return (
-      <Panel
-        title="Garment art missing"
-        body={`Could not load the overlay for ${assetsFailed.join(', ')}. Check the file paths in src/data/garments.js.`}
+        title="Starting camera…"
+        body="Accept the permission prompt to continue. Nothing is recorded, and no photo is taken until you press the shutter."
       />
     );
   }

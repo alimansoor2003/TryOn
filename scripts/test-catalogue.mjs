@@ -21,19 +21,20 @@ test('the catalogue is non-empty and small enough to preload', () => {
   assert.ok(GARMENTS.length >= 1 && GARMENTS.length <= 5, `got ${GARMENTS.length}`);
 });
 
-test('every garment declares a body region the solver understands', () => {
+test('every garment declares a category IDM-VTON accepts', () => {
   for (const g of GARMENTS) {
-    assert.ok(['upper', 'lower'].includes(g.fit.region), `${g.id} region: ${g.fit.region}`);
+    assert.ok(
+      ['upper_body', 'lower_body', 'dresses'].includes(g.category),
+      `${g.id} category: ${g.category}`,
+    );
   }
 });
 
-test('lower-body garments are not silently treated as upper-body', () => {
-  // A missing `region` defaults to 'upper', which would render shorts across
-  // the chest. Anything whose product category says lower_body must say so.
+test('every garment has a description worth conditioning on', () => {
+  // IDM-VTON conditions on garment_des. "a shirt" measurably weakens the
+  // result against one naming colour, sleeve length and details.
   for (const g of GARMENTS) {
-    if (g.product.category === 'lower_body') {
-      assert.equal(g.fit.region, 'lower', `${g.id} is lower_body but fit.region is ${g.fit.region}`);
-    }
+    assert.ok(g.garment_des?.length > 20, `${g.id} description is too thin: "${g.garment_des}"`);
   }
 });
 
@@ -64,28 +65,19 @@ test('a mis-printed QR code falls back instead of showing a blank screen', () =>
   }
 });
 
-test('every overlay asset referenced by the catalogue exists on disk', () => {
+test('every carousel thumbnail exists on disk', () => {
   for (const g of GARMENTS) {
-    const file = resolve(ROOT, 'public', g.fit.src.replace(/^\//, ''));
-    assert.ok(existsSync(file), `missing overlay for ${g.id}: ${g.fit.src}`);
+    const file = resolve(ROOT, 'public', g.thumb.replace(/^\//, ''));
+    assert.ok(existsSync(file), `missing thumbnail for ${g.id}: ${g.thumb}`);
   }
 });
 
-test('fit calibration values are inside sane ranges', () => {
-  for (const { id, fit } of GARMENTS) {
-    assert.ok(fit.span > 0.2 && fit.span < 1, `${id} span`);
-    assert.ok(fit.widthFactor > 0.8 && fit.widthFactor < 2.5, `${id} widthFactor`);
-    assert.ok(fit.anchor.y >= 0 && fit.anchor.y <= 1, `${id} anchor.y`);
-    assert.ok(Math.abs(fit.offsetY) < 0.5, `${id} offsetY`);
-  }
-});
-
-test('a garment marked VTON-ready actually has a product photo on disk', () => {
-  // Guards the swap-in: flipping product.ready without adding the file would
+test('a garment marked ready actually has its VTON asset on disk', () => {
+  // Guards the swap-in: flipping `ready` without adding the file would
   // otherwise only fail at request time, in front of a customer.
-  for (const g of GARMENTS.filter((g) => g.product.ready)) {
-    const file = resolve(ROOT, 'public', g.product.src.replace(/^\//, ''));
-    assert.ok(existsSync(file), `${g.id} is marked ready but ${g.product.src} is missing`);
+  for (const g of GARMENTS.filter((g) => g.ready)) {
+    const file = resolve(ROOT, 'public', g.aiGarmentUrl.replace(/^\//, ''));
+    assert.ok(existsSync(file), `${g.id} is marked ready but ${g.aiGarmentUrl} is missing`);
   }
 });
 
@@ -94,8 +86,8 @@ test('every VTON asset is a centred 3:4 image on white', async () => {
   // Feeding it a square photo on a grey studio sweep is the most likely cause
   // of warped or discoloured output, and nothing at runtime would flag it —
   // the request succeeds and just returns a worse picture.
-  for (const g of GARMENTS.filter((g) => g.product.ready)) {
-    const file = resolve(ROOT, 'public', g.product.src.replace(/^\//, ''));
+  for (const g of GARMENTS.filter((g) => g.ready)) {
+    const file = resolve(ROOT, 'public', g.aiGarmentUrl.replace(/^\//, ''));
     const img = sharp(file);
     const meta = await img.metadata();
 

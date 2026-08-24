@@ -18,8 +18,8 @@ import { useEffect, useState } from 'react';
  */
 const STAGES = [
   { after: 0, text: 'Sending your photo…' },
-  { after: 3, text: 'Warming up the model…' },
-  { after: 10, text: 'Fitting the garment to your body…' },
+  { after: 3, text: 'Tailoring your garment with AI…' },
+  { after: 10, text: 'Fitting it to your body…' },
   { after: 20, text: 'Rendering fabric and shadows…' },
   { after: 35, text: 'Almost there — cold starts take a little longer.' },
 ];
@@ -70,7 +70,18 @@ async function saveImage(url, filename) {
   }
 }
 
-export default function TryOnResult({ status, result, captured, error, elapsed, garment, onRetry, onClose, onCancel }) {
+export default function TryOnResult({
+  status,
+  result,
+  captured,
+  error,
+  elapsed,
+  garment,
+  onRetry,
+  onClose,
+  onCancel,
+  onRetake,
+}) {
   const [showBefore, setShowBefore] = useState(false);
   const [saveState, setSaveState] = useState('idle');
 
@@ -89,7 +100,17 @@ export default function TryOnResult({ status, result, captured, error, elapsed, 
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <Spinner />
           <p className="mt-6 text-[15px] font-medium text-white">{stageFor(elapsed)}</p>
-          <p className="mt-2 font-mono text-xs tabular-nums text-white/40">
+
+          {/*
+            An indeterminate bar, not a percentage. We genuinely do not know how
+            long this takes — a warm model finishes in seconds, a cold start
+            takes half a minute — and a fake percentage that stalls at 90% is
+            worse than one that never claimed to know.
+          */}
+          <div className="mt-5 h-1 w-56 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-1/3 animate-[indeterminate_1.6s_ease-in-out_infinite] rounded-full bg-white/70" />
+          </div>
+          <p className="mt-3 font-mono text-xs tabular-nums text-white/40">
             {elapsed.toFixed(1)}s
           </p>
           <p className="mt-6 max-w-xs text-xs leading-relaxed text-white/40">
@@ -174,14 +195,23 @@ export default function TryOnResult({ status, result, captured, error, elapsed, 
             )}
           </div>
 
-          <footer className="flex gap-3 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-full border border-white/20 py-3 text-sm font-medium text-white/85 transition hover:bg-white/10"
-            >
-              Try another
-            </button>
+          <footer className="px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4">
+            <div className="mb-3 flex gap-3">
+              <button
+                type="button"
+                onClick={onRetake}
+                className="flex-1 rounded-full border border-white/20 py-3 text-sm font-medium text-white/85 transition hover:bg-white/10"
+              >
+                Retake photo
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-full border border-white/20 py-3 text-sm font-medium text-white/85 transition hover:bg-white/10"
+              >
+                Try another garment
+              </button>
+            </div>
             <button
               type="button"
               onClick={async () => {
@@ -190,7 +220,7 @@ export default function TryOnResult({ status, result, captured, error, elapsed, 
                 setSaveState(how);
                 setTimeout(() => setSaveState('idle'), 2500);
               }}
-              className="flex-1 rounded-full bg-white py-3 text-sm font-semibold text-black transition active:scale-[0.98]"
+              className="w-full rounded-full bg-white py-3.5 text-sm font-semibold text-black transition active:scale-[0.98]"
             >
               {saveState === 'saving'
                 ? 'Saving…'
@@ -198,7 +228,7 @@ export default function TryOnResult({ status, result, captured, error, elapsed, 
                   ? 'Saved'
                   : saveState === 'opened'
                     ? 'Opened — long-press to save'
-                    : 'Download'}
+                    : 'Save photo to phone'}
             </button>
           </footer>
         </>

@@ -8,12 +8,10 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "qr": "node scripts/generate-qr.mjs",
-    "test": "node scripts/test-fit.mjs && node scripts/test-capture.mjs && node scripts/test-catalogue.mjs",
-    "vendor:model": "node scripts/vendor-model.mjs",
+    "test": "node scripts/test-photo.mjs && node scripts/test-catalogue.mjs",
     "cutout": "node scripts/cutout.mjs"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "^0.10.22",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "replicate": "^1.4.0"

@@ -18,3 +18,16 @@
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* Indeterminate progress sweep for the try-on loading modal. Deliberately not a
+   percentage: the wait is dominated by whether Replicate cold-starts, which we
+   cannot see, and a fake percentage that stalls near the end is worse than one
+   that never claimed to know. */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
