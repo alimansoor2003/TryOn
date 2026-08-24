@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Landing from './components/Landing.jsx';
 import CameraView from './components/CameraView.jsx';
 import CaptureBar from './components/CaptureBar.jsx';
 import ConfirmPhoto from './components/ConfirmPhoto.jsx';
@@ -20,11 +21,16 @@ function itemIdFromUrl() {
 /**
  * Photo-AI try-on flow:
  *
- *   camera  ->  confirm  ->  processing  ->  result
- *                  |                            |
- *                  +--------- retake -----------+
+ *   landing  ->  camera  ->  confirm  ->  processing  ->  result
+ *      |            |            |                          |
+ *      +-- upload --+            +--------- retake ---------+
  *
- * The only transition out of `camera` is a deliberate press of the shutter or a
+ * `landing` is where a QR scan arrives: it names the scanned garment and shows
+ * it, before asking for anything. Opening straight into a camera means the first
+ * thing a shopper sees is their own face and a permission prompt, with no
+ * indication of what they scanned or why the page wants a photo.
+ *
+ * The only transitions into `confirm` are a deliberate press of the shutter or a
  * file the shopper picked. Nothing here observes the video, and no timer exists
  * anywhere in this component — the camera is a viewfinder, not a sensor.
  */
@@ -33,8 +39,13 @@ export default function App() {
   const [activeId, setActiveId] = useState(initial.id);
   const [photo, setPhoto] = useState(null);
   const [photoError, setPhotoError] = useState(null);
+  /** 'landing' until the shopper asks for the camera. */
+  const [screen, setScreen] = useState('landing');
 
-  const camera = useCamera({ autoStart: true });
+  // Not autoStart: the landing screen must render before anything asks for the
+  // camera, or the permission prompt arrives over a page the shopper has not
+  // read yet — which is both worse UX and a worse-converting prompt.
+  const camera = useCamera({ autoStart: false });
   const tryOn = useTryOn();
 
   const garment = useMemo(
@@ -70,11 +81,18 @@ export default function App() {
     }
   }, []);
 
+  const openCamera = useCallback(() => {
+    setScreen('camera');
+    if (camera.status !== 'ready') camera.start('user');
+  }, [camera]);
+
   const retake = useCallback(() => {
     setPhoto(null);
     setPhotoError(null);
     tryOn.reset();
-  }, [tryOn]);
+    setScreen('camera');
+    if (camera.status !== 'ready') camera.start('user');
+  }, [tryOn, camera]);
 
   // "Try another garment" keeps the photo: the shopper already stood still for
   // it, and making them pose again to see a second item is the fastest way to
@@ -83,18 +101,34 @@ export default function App() {
 
   const ready = camera.status === 'ready';
   const confirming = Boolean(photo) && tryOn.status === 'idle';
+  const onLanding = screen === 'landing' && !photo;
 
   return (
     <main className="relative h-full w-full overflow-hidden bg-black">
-      <CameraView
-        videoRef={camera.videoRef}
-        mirrored={camera.facingMode === 'user'}
-        showGuide={ready && !photo}
-      />
+      {/* Kept mounted once the camera screen is reached so switching back and
+          forth does not tear down and re-request the stream. */}
+      {!onLanding && (
+        <CameraView
+          videoRef={camera.videoRef}
+          mirrored={camera.facingMode === 'user'}
+          showGuide={ready && !photo}
+        />
+      )}
 
-      {ready && !photo && (
+      {onLanding && (
+        <Landing
+          garment={garment}
+          garments={GARMENTS}
+          matched={matched}
+          onSelect={setActiveId}
+          onTakePhoto={openCamera}
+          onFile={choosePhoto}
+        />
+      )}
+
+      {!onLanding && ready && !photo && (
         <>
-          <TopBar garment={garment} onFlip={camera.flip} />
+          <TopBar garment={garment} onFlip={camera.flip} onBack={() => setScreen('landing')} />
 
           <div className="absolute inset-x-0 bottom-0 z-20 pb-[env(safe-area-inset-bottom)]">
             <div className="bg-gradient-to-t from-black/85 via-black/55 to-transparent pb-5 pt-12">
@@ -148,10 +182,11 @@ export default function App() {
         onRetry={() => photo && tryOn.submit(photo.dataUrl, garment)}
       />
 
-      <StatusLayer
-        camera={camera}
-        onRetry={() => camera.start(camera.facingMode)}
-      />
+      {/* Only meaningful once the camera has been asked for; on the landing
+          screen there is nothing to report yet. */}
+      {!onLanding && (
+        <StatusLayer camera={camera} onRetry={() => camera.start(camera.facingMode)} />
+      )}
     </main>
   );
 }

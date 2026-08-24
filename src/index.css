@@ -31,3 +31,16 @@
     transform: translateX(320%);
   }
 }
+
+/* Slow float for the landing page's scattered garment cut-outs. Small
+   amplitude on purpose: enough to keep the page from looking like a static
+   screenshot, not enough to pull attention off the centre column. */
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}

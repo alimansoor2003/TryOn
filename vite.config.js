@@ -83,7 +83,9 @@ export default defineConfig(({ mode }) => ({
   plugins: [apiDevServer(mode), react(), tailwindcss()],
   server: {
     host: true, // expose on the LAN so a phone can reach the dev server
-    port: 5173,
+    // 5173 by default so the printed QR codes keep working, but overridable so
+    // a second instance can run alongside the first instead of failing to bind.
+    port: Number(process.env.PORT) || 5173,
   },
   build: {
     target: 'es2022',
