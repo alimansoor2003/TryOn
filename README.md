@@ -16,9 +16,7 @@ npm run dev
 ```
 
 `npm run dev` also serves `/api/*` by running the Vercel functions inside Vite,
-so the AI try-on works locally. Put `GEMINI_API_KEY` in `.env.local` first —
-without it the endpoint returns a clear `missing_key` error rather than failing
-obscurely.
+so the AI try-on works locally with no keys configured.
 
 Open the printed Network URL on a phone. **The camera will not work over plain `http://`** — see [Testing on a phone](#testing-on-a-phone).
 
@@ -80,45 +78,67 @@ internal address and have the server retrieve it. The garment is resolved from
 description measurably weakens the result against one naming colour, sleeve
 length and details.
 
-## Running this for (almost) nothing
+## Running this for nothing
 
-Every part of the stack has a free tier. The AI call was the only thing that
-cost money, so it is now pluggable and defaults to the free one.
+Every part of the stack is free, including the AI call. No payment method
+anywhere.
 
 | Piece | Service | Cost |
 |---|---|---|
 | Hosting + serverless API | Vercel Hobby | Free |
-| AI try-on | Gemini image API | Free — ~500 images/day, **no card** |
-| Pose tracking | *removed* | — |
+| AI try-on | `yisol/IDM-VTON` on HF Spaces | **Free, no account** |
 | Assets, QR codes | local scripts | Free |
 
-```bash
-VTON_PROVIDER=gemini
-GEMINI_API_KEY=...    # aistudio.google.com/apikey
-```
-
-That is the whole setup. No payment method anywhere.
-
-### Why not Replicate by default
-
-Replicate charges per prediction, and — the part that actually breaks a demo —
-throttles accounts with no payment method to roughly **six predictions a minute
-with a burst of one**. A shopper pressing the button twice hits a 429. Without
-credit it returns 402 outright.
-
-Replicate is still supported and still better: IDM-VTON is *purpose-built* for
-try-on, trained on garment/person pairs, so it warps the actual garment onto the
-body. Gemini is a general image editor following a try-on instruction — very
-good, but it will occasionally restyle something it was told to leave alone.
-
-Switch with one variable:
+The default provider calls the Space the IDM-VTON authors publish, running on
+Hugging Face's ZeroGPU — the same model Replicate charges for. It works
+anonymously. Verified end to end at **27.5s** per generation.
 
 ```bash
-VTON_PROVIDER=replicate
+npm run check:vton   # real request through /api/tryon, prints provider and timing
 ```
 
-Both live behind the same interface in `api/providers/`, so `/api/tryon` and the
-whole front end are unchanged either way.
+Optionally set `HF_TOKEN` (free, no card, from
+[huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)) to
+raise the ZeroGPU quota. Worth doing before demoing to anyone.
+
+### What "free" costs you
+
+This is shared public infrastructure, not an SLA. The Space queues behind
+everyone else using it, its owner can pause or restart it, and ZeroGPU applies a
+rolling quota per caller. Expect the occasional slow or failed run. Each of those
+cases has its own error message — `quota_exceeded`, `space_unavailable` — rather
+than a generic failure.
+
+**Diffusion steps are the lever that matters.** Measured on this Space: 20 steps
+~29s, 30 steps ~54s. Vercel caps a Hobby function at 60s, so the Space's own
+default of 30 leaves almost no headroom — one busy moment in the queue and the
+function is killed mid-generation, which reads as a failure rather than a slow
+result. The provider uses 20; raise it with `HF_DENOISE_STEPS` if you move to a
+plan with a longer limit.
+
+### The other two providers
+
+```bash
+VTON_PROVIDER=huggingface   # default, free
+VTON_PROVIDER=replicate     # paid, ~cents/run, most reliable
+VTON_PROVIDER=gemini        # paid — see below
+```
+
+**Replicate** runs the same IDM-VTON model on dedicated infrastructure: no queue,
+no quota, roughly a few cents a prediction. It is the right choice for a demo
+that has to work on a schedule. Accounts *without* a payment method are throttled
+to about six predictions a minute with a burst of one, so a shopper pressing the
+button twice gets a 429.
+
+**Gemini is no longer free.** Google moved image generation off the free tier —
+free-tier keys now report `limit: 0` for every image model
+(`gemini-3.1-flash-image`, `gemini-2.5-flash-image`, `gemini-3-pro-image`),
+verified against a live key. It needs billing enabled in AI Studio. It is also a
+general image editor following a try-on instruction rather than a purpose-built
+try-on model, so garment fidelity is lower than IDM-VTON.
+
+All three sit behind one interface in `api/providers/`. Switching is one
+environment variable; `/api/tryon` and the entire front end are unchanged.
 
 ### Model versions (Replicate only)
 
@@ -126,8 +146,7 @@ whole front end are unchanged either way.
 `/v1/models/{owner}/{name}/predictions`, which only serves Replicate's *official*
 models — community ones answer **404** there. The provider resolves the latest
 version at cold start and runs through `/v1/predictions`. Pin
-`IDM_VTON_MODEL=owner/name:hash` for a demo you intend to repeat, so a model
-update cannot change the output under you.
+`IDM_VTON_MODEL=owner/name:hash` for a demo you intend to repeat.
 
 ## Adding real garments
 
@@ -245,8 +264,8 @@ The WASM runtime is already served from your own origin: `vite.config.js` copies
 
 ## Environment
 
-Copy `.env.example` to `.env.local`. For the free default you need exactly one
-value: `GEMINI_API_KEY`.
+Copy `.env.example` to `.env.local`. **Nothing in it is required** — the default
+provider works with no key at all.
 
 No key here has a `VITE_` prefix, deliberately. Vite inlines `VITE_*` into the
 client bundle, which would hand your key to every shopper who scans a QR code.

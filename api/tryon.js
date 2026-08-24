@@ -1,5 +1,6 @@
 import { GARMENTS } from '../src/data/garments.js';
 import * as gemini from './providers/gemini.js';
+import * as huggingface from './providers/huggingface.js';
 import * as replicate from './providers/replicate.js';
 
 /**
@@ -25,11 +26,15 @@ import * as replicate from './providers/replicate.js';
  * outruns the Edge limit, and vercel.json gives this function 60s.
  */
 
-const PROVIDERS = { gemini, replicate };
+const PROVIDERS = { huggingface, gemini, replicate };
 
-/** Free by default. Replicate costs per prediction and throttles hard without a
- *  payment method, which is the wrong default for a demo. */
-const DEFAULT_PROVIDER = 'gemini';
+/**
+ * Free by default, and the only option that is actually free as of writing.
+ * Google moved image generation off the Gemini free tier (it reports
+ * `limit: 0`), and Replicate needs a payment method. The Hugging Face Space runs
+ * the same IDM-VTON model Replicate charges for.
+ */
+const DEFAULT_PROVIDER = 'huggingface';
 
 // Vercel caps a serverless request body at ~4.5MB. A base64 payload is ~1.33x
 // the raw bytes, so anything over this is rejected by the platform before our
