@@ -79,12 +79,23 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
     // supply their own mask. Fixed seed so the same photo and garment reproduce;
     // a demo that returns something different each press invites the question of
     // which one was real.
+    //
+    // is_checked_crop=true matters more than it looks. The Space's own pipeline
+    // resizes whatever it's given to VITON-HD's fixed 768x1024 (3:4) canvas.
+    // With crop off, that resize is non-uniform: a phone photo — commonly
+    // 9:16, nothing like 3:4 — gets squashed to fit, and every body part in it
+    // squashes with it, which is exactly a distorted body and stretched hands.
+    // With crop on, the Space instead center-crops the photo to a 3:4 box
+    // first, runs the *uniform* resize on that, and pastes the try-on result
+    // back into the original photo at the crop location — so the parts of the
+    // body inside the crop keep their real proportions, and nothing outside it
+    // is touched at all.
     const result = await app.predict('/tryon', [
       { background: dataUrlToBlob(personDataUrl), layers: [], composite: null },
       garment,
       garmentDes,
       true,
-      false,
+      true,
       DENOISE_STEPS,
       42,
     ]);
