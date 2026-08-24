@@ -16,9 +16,9 @@ npm run dev
 ```
 
 `npm run dev` also serves `/api/*` by running the Vercel functions inside Vite,
-so the AI try-on works locally. Put `REPLICATE_API_TOKEN` in `.env.local` first —
-without it the endpoint returns a clear `missing_token` error rather than
-failing obscurely.
+so the AI try-on works locally. Put `GEMINI_API_KEY` in `.env.local` first —
+without it the endpoint returns a clear `missing_key` error rather than failing
+obscurely.
 
 Open the printed Network URL on a phone. **The camera will not work over plain `http://`** — see [Testing on a phone](#testing-on-a-phone).
 
@@ -80,11 +80,51 @@ internal address and have the server retrieve it. The garment is resolved from
 description measurably weakens the result against one naming colour, sleeve
 length and details.
 
-### Model versions
+## Running this for (almost) nothing
+
+Every part of the stack has a free tier. The AI call was the only thing that
+cost money, so it is now pluggable and defaults to the free one.
+
+| Piece | Service | Cost |
+|---|---|---|
+| Hosting + serverless API | Vercel Hobby | Free |
+| AI try-on | Gemini image API | Free — ~500 images/day, **no card** |
+| Pose tracking | *removed* | — |
+| Assets, QR codes | local scripts | Free |
+
+```bash
+VTON_PROVIDER=gemini
+GEMINI_API_KEY=...    # aistudio.google.com/apikey
+```
+
+That is the whole setup. No payment method anywhere.
+
+### Why not Replicate by default
+
+Replicate charges per prediction, and — the part that actually breaks a demo —
+throttles accounts with no payment method to roughly **six predictions a minute
+with a burst of one**. A shopper pressing the button twice hits a 429. Without
+credit it returns 402 outright.
+
+Replicate is still supported and still better: IDM-VTON is *purpose-built* for
+try-on, trained on garment/person pairs, so it warps the actual garment onto the
+body. Gemini is a general image editor following a try-on instruction — very
+good, but it will occasionally restyle something it was told to leave alone.
+
+Switch with one variable:
+
+```bash
+VTON_PROVIDER=replicate
+```
+
+Both live behind the same interface in `api/providers/`, so `/api/tryon` and the
+whole front end are unchanged either way.
+
+### Model versions (Replicate only)
 
 `cuuupid/idm-vton` is a community model, and an unversioned slug posts to
 `/v1/models/{owner}/{name}/predictions`, which only serves Replicate's *official*
-models — community ones answer **404** there. The endpoint resolves the latest
+models — community ones answer **404** there. The provider resolves the latest
 version at cold start and runs through `/v1/predictions`. Pin
 `IDM_VTON_MODEL=owner/name:hash` for a demo you intend to repeat, so a model
 update cannot change the output under you.
@@ -205,9 +245,12 @@ The WASM runtime is already served from your own origin: `vite.config.js` copies
 
 ## Environment
 
-Copy `.env.example` to `.env.local`. Only `REPLICATE_API_TOKEN` is required, and only for Phase 4.
+Copy `.env.example` to `.env.local`. For the free default you need exactly one
+value: `GEMINI_API_KEY`.
 
-That variable deliberately has **no** `VITE_` prefix. Vite inlines `VITE_*` variables into the client bundle, which would hand the token to every shopper who scans a QR code. It is read only inside `api/tryon.js`, on the server.
+No key here has a `VITE_` prefix, deliberately. Vite inlines `VITE_*` into the
+client bundle, which would hand your key to every shopper who scans a QR code.
+They are read only inside `api/`, on the server.
 
 ---
 
@@ -217,7 +260,7 @@ That variable deliberately has **no** `VITE_` prefix. Vite inlines `VITE_*` vari
 |---|---|
 | F1 — `item_id` URL routing, per-garment assets | Done. Unknown ids fall back with a visible notice. |
 | F2 — WebRTC camera, 33-point pose, auto scale/tilt/translate | Done, upper and lower body. |
-| F3 — Capture, IDM-VTON, result | Done. **Never run against live Replicate** — no token here. |
+| F3 — Capture, generate, result | Done. **Never run against a live provider** — no API key in this environment. |
 | F4 — Viewfinder, top bar, carousel, result modal | Done, with before/after compare. |
 | NFR — iOS 15+, Android 10+ | Coded for, **not yet verified on real devices**. |
 | NFR — 24–30 FPS on mid-range | Pipeline runs at camera framerate; inference measures ~21ms (~48fps of headroom) on an Intel iGPU. **Not yet measured on a mid-range phone.** |
