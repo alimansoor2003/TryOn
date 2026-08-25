@@ -20,14 +20,14 @@
  * as one sliding sheet, which is worse than not animating at all.
  */
 const FIELD = [
-  { top: '3%', left: '-13%', w: 'w-24 sm:w-36', rot: '-14deg', dur: '11s', delay: '0s', card: false },
-  { top: '7%', right: '-14%', w: 'w-28 sm:w-40', rot: '12deg', dur: '13s', delay: '.8s', card: false },
-  { top: '30%', left: '-17%', w: 'w-20 sm:w-32', rot: '8deg', dur: '9s', delay: '1.6s', card: false },
-  { top: '26%', right: '-16%', w: 'w-24 sm:w-36', rot: '-9deg', dur: '12s', delay: '.4s', card: true },
-  { bottom: '22%', left: '-15%', w: 'w-28 sm:w-40', rot: '10deg', dur: '10s', delay: '2.1s', card: true },
-  { bottom: '14%', right: '-13%', w: 'w-20 sm:w-32', rot: '-11deg', dur: '14s', delay: '1.1s', card: false },
-  { bottom: '4%', left: '6%', w: 'w-16 sm:w-24', rot: '-6deg', dur: '12s', delay: '2.6s', card: false },
-  { top: '15%', left: '12%', w: 'w-14 sm:w-20', rot: '15deg', dur: '10s', delay: '3.1s', card: false },
+  { top: '3%', left: '-13%', w: 'w-24 sm:w-36', rot: '-14deg', dur: '11s', delay: '0s', alt: false, card: false },
+  { top: '7%', right: '-14%', w: 'w-28 sm:w-40', rot: '12deg', dur: '13s', delay: '.8s', alt: true, card: false },
+  { top: '30%', left: '-17%', w: 'w-20 sm:w-32', rot: '8deg', dur: '9s', delay: '1.6s', alt: false, card: false },
+  { top: '26%', right: '-16%', w: 'w-24 sm:w-36', rot: '-9deg', dur: '12s', delay: '.4s', alt: true, card: true },
+  { bottom: '22%', left: '-15%', w: 'w-28 sm:w-40', rot: '10deg', dur: '10s', delay: '2.1s', alt: false, card: true },
+  { bottom: '14%', right: '-13%', w: 'w-20 sm:w-32', rot: '-11deg', dur: '14s', delay: '1.1s', alt: true, card: false },
+  { bottom: '4%', left: '6%', w: 'w-16 sm:w-24', rot: '-6deg', dur: '12s', delay: '2.6s', alt: false, card: false },
+  { top: '15%', left: '12%', w: 'w-14 sm:w-20', rot: '15deg', dur: '10s', delay: '3.1s', alt: true, card: false },
 ];
 
 /** How much of the field each screen shows. Busier pages take fewer. */
@@ -50,7 +50,11 @@ export default function FloatingGarments({ garments, exclude, density = 'full' }
         return (
           <div
             key={i}
-            className={`absolute ${item.w} animate-[drift_var(--dur)_ease-in-out_infinite] opacity-25 sm:opacity-40`}
+            className={`absolute ${item.w} opacity-25 sm:opacity-40 ${
+              item.alt
+                ? 'animate-[drift-alt_var(--dur)_ease-in-out_infinite]'
+                : 'animate-[drift_var(--dur)_ease-in-out_infinite]'
+            }`}
             style={{
               top: item.top,
               bottom: item.bottom,

@@ -44,3 +44,47 @@
     transform: translateY(-14px);
   }
 }
+
+/* Brand tokens. Defined once so the violet cannot drift between screens as
+   they get edited independently — the failure mode when five components each
+   carry their own hex. */
+@theme {
+  --color-brand: #5a31f4;
+  --color-brand-dark: #4a27d4;
+  --color-ground: #f4f4f6;
+}
+
+/* Second drift track, offset from the first. Items sharing one keyframe move in
+   lockstep and read as a single sliding sheet rather than as separate objects;
+   a second path with a different shape breaks that up. */
+@keyframes drift-alt {
+  0%,
+  100% {
+    transform: translateY(-8px) translateX(0);
+  }
+  50% {
+    transform: translateY(10px) translateX(-6px);
+  }
+}
+
+/* Entrance for the result image. It arrives after a ~30s wait, so it should
+   land rather than blink into place. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Drift is decorative; honouring the OS setting costs nothing and this is the
+     kind of ambient motion that triggers people who ask for it to stop. */
+  .animate-\[drift_var\(--dur\)_ease-in-out_infinite\],
+  [class*='animate-[drift'] {
+    animation: none !important;
+  }
+}

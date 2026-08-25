@@ -176,6 +176,7 @@ export default function App() {
         error={tryOn.error}
         elapsed={tryOn.elapsed}
         garment={garment}
+        garments={GARMENTS}
         onCancel={tryOn.cancel}
         onClose={tryAnother}
         onRetake={retake}
