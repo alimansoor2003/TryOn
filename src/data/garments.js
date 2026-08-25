@@ -4,8 +4,12 @@
  * Each garment carries two images, produced together by
  * `npm run cutout -- <photo> <dir>`:
  *
- *   thumb        Alpha cutout of the garment alone. Only a carousel thumbnail
- *                now that the live AR overlay is gone.
+ *   thumb        Alpha cutout of the garment alone — the floating products on
+ *                the landing page, and the carousel thumbnail.
+ *
+ *   tile         The untouched studio photo, used for the landing page's
+ *                full-bleed photo tiles. A transparent cutout cannot fill a
+ *                tile; it needs an image with a background of its own.
  *
  *   aiGarmentUrl The IDM-VTON input: the garment cut out, composited on white
  *                and padded to a centred 768x1024. That is the shape VITON-HD
@@ -26,6 +30,7 @@ export const GARMENTS = [
     subtitle: 'Black · Regular fit',
     swatch: '#1d1d1f',
     thumb: '/garments/tee-black/overlay.png',
+    tile: '/garments/tee-black/product.jpg',
     aiGarmentUrl: '/garments/tee-black/garment.png',
     category: 'upper_body',
     garment_des:
@@ -38,6 +43,7 @@ export const GARMENTS = [
     subtitle: 'White · Regular fit',
     swatch: '#f0f0f2',
     thumb: '/garments/tee-white/overlay.png',
+    tile: '/garments/tee-white/product.jpg',
     aiGarmentUrl: '/garments/tee-white/garment.png',
     category: 'upper_body',
     garment_des: 'plain white crew neck short sleeve cotton t-shirt',
@@ -49,6 +55,7 @@ export const GARMENTS = [
     subtitle: 'Black · Mid length',
     swatch: '#232326',
     thumb: '/garments/shorts-black/overlay.png',
+    tile: '/garments/shorts-black/product.jpg',
     aiGarmentUrl: '/garments/shorts-black/garment.png',
     category: 'lower_body',
     garment_des:
