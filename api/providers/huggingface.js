@@ -104,9 +104,15 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
     const message = String(err?.message ?? err);
 
     if (/quota|exceeded|GPU task/i.test(message)) {
+      // The Space tells us exactly how long the wait is; passing that through
+      // turns "try later" into something a shopper can actually act on.
+      const wait = message.match(/Try again in ([\d:]+)/)?.[1];
       throw Object.assign(
         new Error(
-          'The free ZeroGPU quota for this Space is used up. Wait a few minutes, or set HF_TOKEN in your environment (free at huggingface.co/settings/tokens) to raise the limit.',
+          `The free GPU quota is used up${wait ? `, and resets in ${wait}` : ''}. ` +
+            (process.env.HF_TOKEN
+              ? 'Wait for the reset, or switch VTON_PROVIDER to replicate.'
+              : 'Setting HF_TOKEN (free, no card, from huggingface.co/settings/tokens) raises this limit a long way — it is not set on this deployment.'),
         ),
         { code: 'quota_exceeded', status: 429 },
       );
@@ -119,6 +125,21 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
         { code: 'space_unavailable', status: 503 },
       );
     }
+
+    // Gradio reports a crash inside the Space as the literal string "An error
+    // occurred", with nothing else. Passed through verbatim that is the least
+    // useful message in the app, and it was what a real shopper hit. The
+    // overwhelmingly common cause is the photo: the Space runs human parsing and
+    // pose detection first, and both fail hard when they cannot find a person.
+    if (/^["']?An error occurred/i.test(message.trim())) {
+      throw Object.assign(
+        new Error(
+          'The model could not read a body in that photo. Use a full-body shot of one person, facing the camera, in good light — then try again.',
+        ),
+        { code: 'photo_unusable', status: 422 },
+      );
+    }
+
     throw Object.assign(new Error(message.slice(0, 300)), { code: 'hf_failed', status: 502 });
   }
 
