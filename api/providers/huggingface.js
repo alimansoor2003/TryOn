@@ -68,6 +68,8 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
   });
 
   let output;
+  const startedAt = Date.now();
+  let elapsedMs = 0;
   try {
     const app = await connect();
     // Positional, matching the Space's own signature:
@@ -101,6 +103,7 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
     ]);
     output = result?.data?.[0];
   } catch (err) {
+    elapsedMs = Date.now() - startedAt;
     const message = String(err?.message ?? err);
 
     if (/quota|exceeded|GPU task/i.test(message)) {
@@ -114,7 +117,7 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
               ? 'Wait for the reset, or switch VTON_PROVIDER to replicate.'
               : 'Setting HF_TOKEN (free, no card, from huggingface.co/settings/tokens) raises this limit a long way — it is not set on this deployment.'),
         ),
-        { code: 'quota_exceeded', status: 429 },
+        { code: 'quota_exceeded', status: 429, detail: message },
       );
     }
     if (/sleep|paused|building|starting|not running/i.test(message)) {
@@ -122,25 +125,46 @@ export async function generate({ personDataUrl, garmentUrl, garmentDes }) {
         new Error(
           `The ${SPACE} Space is asleep or restarting. Open huggingface.co/spaces/${SPACE} to wake it, then try again.`,
         ),
-        { code: 'space_unavailable', status: 503 },
+        { code: 'space_unavailable', status: 503, detail: message },
       );
     }
 
-    // Gradio reports a crash inside the Space as the literal string "An error
-    // occurred", with nothing else. Passed through verbatim that is the least
-    // useful message in the app, and it was what a real shopper hit. The
-    // overwhelmingly common cause is the photo: the Space runs human parsing and
-    // pose detection first, and both fail hard when they cannot find a person.
+    // Gradio reports anything that goes wrong inside the Space as the literal
+    // string "An error occurred", with nothing else — GPU refusal and a crash
+    // in the model look identical from out here. The elapsed time separates
+    // them, and getting this wrong sent a real debugging session chasing photo
+    // quality for an hour.
+    //
+    // A genuine model failure has to get through human parsing and pose
+    // detection first, which costs seconds. A refusal comes back almost
+    // instantly, before any GPU work happens at all.
+    //
+    // Measured: the same photo and garment succeed anonymously from a
+    // residential IP in ~20s, and fail from Vercel in 2.5s. ZeroGPU meters
+    // anonymous callers by IP, and a serverless platform's egress addresses are
+    // shared with every other tenant on it, so that allowance is permanently
+    // spent. HF_TOKEN moves the quota onto the account and off the IP.
     if (/^["']?An error occurred/i.test(message.trim())) {
+      if (elapsedMs < 8000) {
+        throw Object.assign(
+          new Error(
+            process.env.HF_TOKEN
+              ? 'The Space refused the request before starting any work — usually its GPU quota. Wait a few minutes, or switch VTON_PROVIDER to replicate.'
+              : 'The Space refused the request before starting any work. HF_TOKEN is not set on this deployment, so it is being metered anonymously by IP — and a shared hosting IP has no allowance left. Add HF_TOKEN (free, no card, from huggingface.co/settings/tokens) to fix this.',
+          ),
+          { code: 'quota_exceeded', status: 429, detail: message },
+        );
+      }
+
       throw Object.assign(
         new Error(
           'The model could not read a body in that photo. Use a full-body shot of one person, facing the camera, in good light — then try again.',
         ),
-        { code: 'photo_unusable', status: 422 },
+        { code: 'photo_unusable', status: 422, detail: message },
       );
     }
 
-    throw Object.assign(new Error(message.slice(0, 300)), { code: 'hf_failed', status: 502 });
+    throw Object.assign(new Error(message.slice(0, 300)), { code: 'hf_failed', status: 502, detail: message });
   }
 
   const url = output?.url;

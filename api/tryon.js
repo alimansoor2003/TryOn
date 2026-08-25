@@ -41,8 +41,8 @@ const DEFAULT_PROVIDER = 'huggingface';
 // code runs — check first so the client gets a useful message, not an opaque 413.
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
-const jsonError = (res, status, code, message) =>
-  res.status(status).json({ error: { code, message } });
+const jsonError = (res, status, code, message, detail) =>
+  res.status(status).json({ error: { code, message, ...(detail ? { detail } : {}) } });
 
 /**
  * Turns a relative asset path into an absolute URL the provider can fetch.
@@ -160,11 +160,15 @@ export default async function handler(req, res) {
   } catch (err) {
     // Providers throw with `code` and `status` already mapped to something a
     // person can act on; anything without them is genuinely unexpected.
+    // `detail` carries the provider's own raw text. Without it a mis-mapped
+    // error silently rewrites the cause — which is exactly how a connection
+    // failure spent an afternoon looking like a bad photo.
     return jsonError(
       res,
       err.status ?? 502,
       err.code ?? 'provider_failed',
       err.message || 'The try-on call failed.',
+      err.detail,
     );
   }
 }
