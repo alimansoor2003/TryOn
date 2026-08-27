@@ -8,14 +8,17 @@ import FloatingGarments from './FloatingGarments.jsx';
  * One component rather than three because they are the same surface at
  * different moments — splitting them meant unmounting and remounting a
  * full-screen layer mid-flow, which flashes.
+ *
+ * Black and white, matching the landing and confirm screens. The camera is the
+ * only dark surface in the app; everything that is *about* something is a page.
  */
 
 /**
  * Staged reassurance while the model runs. Timed to the shape of a real request
- * rather than a fixed countdown: a warm run finishes in single-digit seconds, a
- * cold start takes half a minute, and we cannot tell which we are in until it
- * returns. A countdown that hits zero and keeps going looks broken; elapsed time
- * that keeps moving does not.
+ * rather than a fixed countdown: a warm run finishes in about twenty seconds, a
+ * cold start takes longer, and we cannot tell which we are in until it returns.
+ * A countdown that hits zero and keeps going looks broken; elapsed time that
+ * keeps moving does not.
  */
 const STAGES = [
   { after: 0, text: 'Sending your photo…' },
@@ -62,6 +65,20 @@ async function saveImage(url, filename) {
   }
 }
 
+/** Shared page frame, so the three states cannot drift apart visually. */
+function Sheet({ garments, exclude, children }) {
+  return (
+    <div className="absolute inset-0 z-40 overflow-y-auto overflow-x-hidden bg-white text-neutral-900">
+      <div className="pointer-events-none absolute inset-0 hidden lg:block">
+        <FloatingGarments garments={garments} exclude={exclude} density="light" />
+      </div>
+      <div className="relative mx-auto flex min-h-full w-full max-w-[440px] flex-col px-6 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function TryOnResult({
   status,
   result,
@@ -85,55 +102,58 @@ export default function TryOnResult({
 
   if (status === 'idle') return null;
 
-  return (
-    <div className="absolute inset-0 z-40 flex flex-col overflow-hidden bg-ground text-neutral-900">
-      <FloatingGarments garments={garments} exclude={garment.id} density="light" />
-
-      {status === 'processing' && (
-        <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-8 text-center">
+  if (status === 'processing') {
+    return (
+      <Sheet garments={garments} exclude={garment.id}>
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
           {/* The garment itself is the loading indicator. It is what the shopper
-              is waiting for, and it beats a neutral spinner at saying so. */}
-          <div className="relative flex size-40 items-center justify-center">
-            <span className="absolute inset-0 rounded-full bg-brand/10 blur-2xl" />
-            <img
-              src={garment.thumb}
-              alt=""
-              className="relative size-32 animate-[drift_3s_ease-in-out_infinite] object-contain drop-shadow-2xl"
-            />
-          </div>
+              is waiting for, which beats a neutral spinner at saying so. */}
+          <img
+            src={garment.thumb}
+            alt=""
+            className="h-40 w-auto animate-[drift_3s_ease-in-out_infinite] object-contain drop-shadow-2xl"
+          />
 
-          <p className="mt-8 text-[17px] font-semibold tracking-tight">{stageFor(elapsed)}</p>
+          <p className="mt-10 text-[20px] font-bold tracking-[-0.02em]">{stageFor(elapsed)}</p>
 
           {/*
             An indeterminate bar, not a percentage. We genuinely do not know how
-            long this takes — a warm model finishes in seconds, a cold start takes
-            half a minute — and a fake percentage that stalls at 90% is worse than
-            one that never claimed to know.
+            long this takes — a warm model finishes in about twenty seconds, a
+            cold start takes longer — and a fake percentage that stalls at 90% is
+            worse than one that never claimed to know.
           */}
-          <div className="mt-5 h-1 w-56 overflow-hidden rounded-full bg-black/5">
-            <div className="h-full w-1/3 animate-[indeterminate_1.6s_ease-in-out_infinite] rounded-full bg-brand" />
+          <div className="mt-5 h-1 w-52 overflow-hidden rounded-full bg-neutral-100">
+            <div className="h-full w-1/3 animate-[indeterminate_1.6s_ease-in-out_infinite] rounded-full bg-neutral-900" />
           </div>
           <p className="mt-3 font-mono text-xs tabular-nums text-neutral-400">
             {elapsed.toFixed(1)}s
           </p>
-
-          <button
-            type="button"
-            onClick={onCancel}
-            className="mt-9 rounded-full bg-white px-5 py-2.5 text-[13px] font-medium text-neutral-600 shadow-sm ring-1 ring-black/5 transition hover:text-neutral-900"
-          >
-            Cancel
-          </button>
         </div>
-      )}
 
-      {status === 'error' && (
-        <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-8 text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-rose-50 text-2xl text-rose-500 ring-1 ring-rose-100">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full rounded-full border border-neutral-200 py-3.5 text-[15px] font-medium text-neutral-700 transition hover:bg-neutral-50"
+        >
+          Cancel
+        </button>
+      </Sheet>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <Sheet garments={garments} exclude={garment.id}>
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-rose-50 text-2xl text-rose-500">
             !
           </div>
-          <h2 className="mt-5 text-xl font-semibold tracking-tight">Try-on failed</h2>
-          <p className="mt-2.5 max-w-sm text-[13px] leading-relaxed text-neutral-500">
+          <h1 className="mt-6 text-[32px] font-bold leading-[0.95] tracking-[-0.03em]">
+            Try-on
+            <br />
+            failed
+          </h1>
+          <p className="mt-3 max-w-[320px] text-[13px] leading-relaxed text-neutral-500">
             {error?.message}
           </p>
           {error?.code && (
@@ -141,120 +161,114 @@ export default function TryOnResult({
               {error.code}
             </p>
           )}
+        </div>
 
+        <div>
           <button
             type="button"
             onClick={onRetry}
-            className="group mt-8 flex w-full max-w-xs items-center justify-between gap-3 rounded-full bg-white py-2 pl-6 pr-2 text-left shadow-lg shadow-black/[0.07] ring-1 ring-black/5 transition active:scale-[0.99]"
+            className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[15px] font-medium text-white transition active:scale-[0.99] hover:bg-neutral-800"
           >
-            <span className="text-[15px] font-medium text-neutral-700">Try again</span>
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand text-white transition group-hover:bg-brand-dark">
-              <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M5 12h13M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
+            Try again
           </button>
           <button
             type="button"
             onClick={onRetake}
-            className="mt-3.5 text-[13px] font-medium text-neutral-500 underline underline-offset-4 transition hover:text-neutral-800"
+            className="mt-3 w-full rounded-full border border-neutral-200 py-3.5 text-[15px] font-medium text-neutral-700 transition hover:bg-neutral-50"
           >
             Retake photo
           </button>
         </div>
-      )}
+      </Sheet>
+    );
+  }
 
-      {status === 'done' && result && (
-        <>
-          <header className="relative z-10 flex items-start justify-between gap-3 px-6 pb-3 pt-[calc(env(safe-area-inset-top)+1.25rem)]">
-            <div className="min-w-0">
-              <span className="inline-block rounded-full bg-brand/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-brand">
-                {showBefore ? 'Your photo' : 'AI try-on'}
-              </span>
-              <h2 className="mt-2 truncate text-lg font-semibold tracking-tight">{garment.name}</h2>
-            </div>
+  if (status === 'done' && result) {
+    return (
+      <Sheet garments={garments} exclude={garment.id}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[32px] font-bold leading-[0.95] tracking-[-0.03em]">
+              {showBefore ? 'Your photo' : 'Here you go'}
+            </h1>
+            <p className="mt-1.5 truncate text-[13px] text-neutral-500">{garment.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-lg leading-none text-neutral-500 transition hover:text-neutral-900"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mt-5 flex flex-1 items-center justify-center overflow-hidden">
+          <div className="relative animate-[reveal_.5s_ease-out] overflow-hidden rounded-[28px] bg-neutral-50 ring-1 ring-black/[0.06]">
+            <img
+              src={showBefore ? captured : result.image}
+              alt={showBefore ? 'The photo you captured' : `AI try-on of ${garment.name}`}
+              className="max-h-[46vh] w-auto object-contain"
+            />
+            {captured && (
+              <button
+                type="button"
+                onClick={() => setShowBefore((v) => !v)}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-neutral-900/85 px-4 py-2 text-xs font-medium text-white backdrop-blur transition hover:bg-neutral-900"
+              >
+                {showBefore ? 'Show result' : 'Compare'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={async () => {
+              setSaveState('saving');
+              const how = await saveImage(result.image, `tryon-${garment.id.toLowerCase()}.png`);
+              setSaveState(how);
+              setTimeout(() => setSaveState('idle'), 2500);
+            }}
+            className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[15px] font-medium text-white transition active:scale-[0.99] hover:bg-neutral-800"
+          >
+            <svg viewBox="0 0 24 24" className="size-[19px]" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <path d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {saveState === 'saving'
+              ? 'Saving…'
+              : saveState === 'saved'
+                ? 'Saved to your phone'
+                : saveState === 'opened'
+                  ? 'Opened — long-press to save'
+                  : 'Save photo'}
+          </button>
+
+          <div className="mt-3 flex gap-3">
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
-              className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-lg leading-none text-neutral-500 shadow-sm ring-1 ring-black/5 transition hover:text-neutral-900"
+              className="flex-1 rounded-full border border-neutral-200 py-3.5 text-[14px] font-medium text-neutral-700 transition hover:bg-neutral-50"
             >
-              ×
+              Try another
             </button>
-          </header>
-
-          <div className="relative z-10 flex flex-1 items-center justify-center overflow-hidden px-6">
-            <div className="relative animate-[reveal_.5s_ease-out] rounded-3xl bg-white p-2.5 shadow-2xl shadow-black/10 ring-1 ring-black/5">
-              <img
-                src={showBefore ? captured : result.image}
-                alt={showBefore ? 'The photo you captured' : `AI try-on of ${garment.name}`}
-                className="max-h-[54vh] w-auto rounded-2xl object-contain"
-              />
-              {captured && (
-                <button
-                  type="button"
-                  onClick={() => setShowBefore((v) => !v)}
-                  className="absolute bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-neutral-900/80 px-4 py-2 text-xs font-medium text-white backdrop-blur transition hover:bg-neutral-900"
-                >
-                  {showBefore ? 'Show result' : 'Compare'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <footer className="relative z-10 px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-5">
             <button
               type="button"
-              onClick={async () => {
-                setSaveState('saving');
-                const how = await saveImage(result.image, `tryon-${garment.id.toLowerCase()}.png`);
-                setSaveState(how);
-                setTimeout(() => setSaveState('idle'), 2500);
-              }}
-              className="group flex w-full items-center justify-between gap-3 rounded-full bg-white py-2 pl-6 pr-2 text-left shadow-lg shadow-black/[0.07] ring-1 ring-black/5 transition active:scale-[0.99]"
+              onClick={onRetake}
+              className="flex-1 rounded-full border border-neutral-200 py-3.5 text-[14px] font-medium text-neutral-700 transition hover:bg-neutral-50"
             >
-              <span className="text-[15px] font-medium text-neutral-700">
-                {saveState === 'saving'
-                  ? 'Saving…'
-                  : saveState === 'saved'
-                    ? 'Saved to your phone'
-                    : saveState === 'opened'
-                      ? 'Opened — long-press to save'
-                      : 'Save photo to phone'}
-              </span>
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand text-white transition group-hover:bg-brand-dark">
-                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <path d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
+              Retake
             </button>
+          </div>
 
-            <div className="mt-4 flex items-center justify-center gap-5 text-[13px] font-medium text-neutral-500">
-              <button
-                type="button"
-                onClick={onClose}
-                className="underline underline-offset-4 transition hover:text-neutral-800"
-              >
-                Try another garment
-              </button>
-              <span className="text-neutral-300">·</span>
-              <button
-                type="button"
-                onClick={onRetake}
-                className="underline underline-offset-4 transition hover:text-neutral-800"
-              >
-                Retake photo
-              </button>
-            </div>
+          <p className="mt-3.5 text-center text-[10px] text-neutral-400">
+            AI-generated · {result.ms ? `${(result.ms / 1000).toFixed(1)}s` : 'may not be exact'}
+          </p>
+        </div>
+      </Sheet>
+    );
+  }
 
-            {result.ms && (
-              <p className="mt-4 text-center text-[10px] text-neutral-400">
-                Generated in {(result.ms / 1000).toFixed(1)}s
-              </p>
-            )}
-          </footer>
-        </>
-      )}
-    </div>
-  );
+  return null;
 }
