@@ -25,6 +25,21 @@ const STRANDS = 38;
 /** Samples along each strand. Below ~60 the crossover point visibly facets. */
 const STEPS = 96;
 
+/**
+ * If the animation's own draw cost averages above this, it switches itself off.
+ *
+ * Measured at 0.19ms/frame on a desktop — about 1% of a 60fps budget — but this
+ * runs on whatever phone walks into the shop, and a decoration must never be the
+ * reason a try-on feels slow. 6ms is roughly a third of the frame budget: far
+ * above anything healthy, low enough to catch a device where this is genuinely
+ * expensive before a person notices. Once tripped it stays off and the last
+ * frame remains as a still image.
+ */
+const FRAME_BUDGET_MS = 6;
+
+/** Frames averaged before judging. One slow frame during a GC pause is noise. */
+const WATCHDOG_WINDOW = 45;
+
 export default function FlowRibbon({ className = '' }) {
   const canvasRef = useRef(null);
 
@@ -43,6 +58,9 @@ export default function FlowRibbon({ className = '' }) {
 
     let raf = 0;
     let phase = 0;
+    let costSum = 0;
+    let costCount = 0;
+    let disabled = false;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -55,6 +73,7 @@ export default function FlowRibbon({ className = '' }) {
       const H = canvas.height;
       if (!W || !H) return;
 
+      const drawStart = performance.now();
       ctx.clearRect(0, 0, W, H);
 
       const midY = H / 2;
@@ -95,7 +114,18 @@ export default function FlowRibbon({ className = '' }) {
         ctx.stroke();
       }
 
-      if (!reduced) {
+      // Self-policing: if this turns out to be expensive on the device actually
+      // running it, stop rather than compete with the work the shopper is
+      // waiting for. The drawn frame stays on screen as a still.
+      costSum += performance.now() - drawStart;
+      costCount += 1;
+      if (costCount >= WATCHDOG_WINDOW) {
+        if (costSum / costCount > FRAME_BUDGET_MS) disabled = true;
+        costSum = 0;
+        costCount = 0;
+      }
+
+      if (!reduced && !disabled) {
         phase += 0.016;
         raf = requestAnimationFrame(draw);
       }
