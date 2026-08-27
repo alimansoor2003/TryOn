@@ -1,4 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { tryOnDirect } from '../lib/hfDirect.js';
+
+/**
+ * Whether to call the Hugging Face Space straight from the browser instead of
+ * through /api/tryon.
+ *
+ * On by default, because the server route cannot work for the free provider:
+ * Hugging Face refuses free ZeroGPU to datacenter callers, so an identical
+ * request that succeeds from a phone in ~19s is turned away by a serverless
+ * function in under three seconds. Set VITE_TRYON_DIRECT=false to force
+ * everything back through the server, which is what the paid providers need
+ * since their credentials must never reach the client.
+ */
+const DIRECT = import.meta.env.VITE_TRYON_DIRECT !== 'false';
 
 /**
  * Sends one already-captured photo for try-on and holds the result.
@@ -58,6 +72,13 @@ export function useTryOn() {
     setStatus('processing');
 
     try {
+      if (DIRECT) {
+        const payload = await tryOnDirect(dataUrl, garment, controller.signal);
+        setResult({ image: payload.image, ms: payload.ms, model: payload.model });
+        setStatus('done');
+        return;
+      }
+
       const res = await fetch('/api/tryon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
