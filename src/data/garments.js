@@ -26,8 +26,8 @@
 export const GARMENTS = [
   {
     id: 'TEE_01',
-    name: 'Adicolor 3-Stripes Tee',
-    subtitle: 'Black · Regular fit',
+    name: 'Black T-Shirt',
+    subtitle: 'Adidas · Regular fit',
     swatch: '#1d1d1f',
     thumb: '/garments/tee-black/overlay.png',
     tile: '/garments/tee-black/product.jpg',
@@ -39,8 +39,8 @@ export const GARMENTS = [
   },
   {
     id: 'TEE_WHITE',
-    name: 'Classic White Tee',
-    subtitle: 'White · Regular fit',
+    name: 'White T-Shirt',
+    subtitle: 'Classic · Regular fit',
     swatch: '#f0f0f2',
     thumb: '/garments/tee-white/overlay.png',
     tile: '/garments/tee-white/product.jpg',
@@ -51,8 +51,8 @@ export const GARMENTS = [
   },
   {
     id: 'SHORTS_01',
-    name: 'Adicolor 3-Stripes Shorts',
-    subtitle: 'Black · Mid length',
+    name: 'Black Shorts',
+    subtitle: 'Adidas · Mid length',
     swatch: '#232326',
     thumb: '/garments/shorts-black/overlay.png',
     tile: '/garments/shorts-black/product.jpg',
