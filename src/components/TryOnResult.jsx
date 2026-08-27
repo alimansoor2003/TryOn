@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import FloatingGarments from './FloatingGarments.jsx';
+import FlowRibbon from './FlowRibbon.jsx';
 
 /**
  * Full-screen surface covering the whole AI try-on lifecycle: waiting, the
@@ -117,15 +118,16 @@ export default function TryOnResult({
           <p className="mt-10 text-[20px] font-bold tracking-[-0.02em]">{stageFor(elapsed)}</p>
 
           {/*
-            An indeterminate bar, not a percentage. We genuinely do not know how
-            long this takes — a warm model finishes in about twenty seconds, a
-            cold start takes longer — and a fake percentage that stalls at 90% is
-            worse than one that never claimed to know.
+            A ribbon rather than a progress bar, and deliberately not a
+            percentage: we genuinely do not know how long this takes — a warm
+            model finishes in about twenty seconds, a cold start takes longer —
+            and a bar that stalls near the end is worse than one that never
+            claimed to know. Continuous motion says "working" without implying
+            a deadline.
           */}
-          <div className="mt-5 h-1 w-52 overflow-hidden rounded-full bg-neutral-100">
-            <div className="h-full w-1/3 animate-[indeterminate_1.6s_ease-in-out_infinite] rounded-full bg-neutral-900" />
-          </div>
-          <p className="mt-3 font-mono text-xs tabular-nums text-neutral-400">
+          <FlowRibbon className="mt-6 h-20 w-full max-w-[300px]" />
+
+          <p className="mt-1 font-mono text-xs tabular-nums text-neutral-400">
             {elapsed.toFixed(1)}s
           </p>
         </div>
